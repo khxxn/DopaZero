@@ -1,0 +1,24 @@
+# Local scratch directories
+.test/
+.tests/
+
+# Local development notes
+/DEV-NOTES.local.md
+
+# Generated test artifacts (test source files stay tracked)
+/tests/home-preview.jpg
+/tests/search-design.jpg
+/tests/verification.txt
+coverage/
+test-results/
+playwright-report/
+
+# Dependencies, caches and logs
+node_modules/
+.cache/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini

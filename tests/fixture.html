@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DopaZero DOM fixture</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #172322; background: #f5f7f6; }
+    * { box-sizing: border-box; }
+    body { max-width: 900px; margin: 0 auto; padding: 22px; }
+    h1 { margin-top: 0; font-size: 24px; }
+    #test-controls, #test-report, #fixture-root { padding: 20px; margin-bottom: 16px; background: white; border: 1px solid #d6dfdb; border-radius: 10px; }
+    button { padding: 10px 14px; margin: 2px; cursor: pointer; }
+    button:disabled { cursor: wait; }
+    #test-summary { font-weight: 700; cursor: pointer; }
+    #test-results { padding-left: 28px; line-height: 1.6; }
+    .pass { color: #096746; } .fail { color: #b52020; }
+    #fixture-root { max-width: 520px; margin: 0 auto; min-height: 250px; }
+    #fixture-root header { display: flex; gap: 12px; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 14px; }
+    #fixture-root input { padding: 10px; width: 100%; }
+    #fixture-root main { padding-top: 10px; }
+    #fixture-root a { color: #14543f; }
+    #fixture-root nav { display: flex; gap: 20px; padding: 18px 0; }
+    #fixture-root :is(ytm-browse, ytd-browse, ytd-watch-flexy, ytm-item-section-renderer,
+      ytm-watch-next-secondary-results-renderer, ytd-watch-next-secondary-results-renderer,
+      ytm-video-with-context-renderer, ytm-video-renderer, ytd-video-renderer,
+      ytm-compact-video-renderer, ytd-compact-video-renderer, ytm-playlist-panel-video-renderer,
+      ytm-reel-shelf-renderer, ytm-reel-item-renderer, ytm-shorts-shelf-renderer,
+      ytm-comment-thread-renderer, ytm-expandable-video-description-body-renderer,
+      ytm-pivot-bar-item-renderer, yt-tab-shape, ytm-tab-shape, ytd-thumbnail,
+      yt-lockup-view-model, ytm-lockup-view-model, yt-thumbnail-view-model, ytm-thumbnail-view-model,
+      ytm-compact-playlist-renderer, ytm-compact-radio-renderer) { display: block; }
+    #fixture-root :is(ytm-video-with-context-renderer, ytm-video-renderer, ytd-video-renderer,
+      ytm-compact-video-renderer, ytd-compact-video-renderer, ytm-playlist-panel-video-renderer) { padding: 16px 0; border-bottom: 1px solid #eee; }
+    #fixture-root [data-test$="title"] { display: block; padding: 6px 0; font-size: 17px; font-weight: 600; }
+    .video-thumbnail-container-large, .video-thumbnail-container-compact, ytd-thumbnail {
+      width: 100%; height: 140px; background: linear-gradient(135deg, #8caaa0, #dae7e1); margin-bottom: 8px;
+    }
+    .avatar { width: 28px; height: 28px; vertical-align: middle; border-radius: 50%; margin-right: 8px; background: #e0b585; }
+    #movie_player { padding: 35px 15px; background: #182424; color: white; }
+    .note { color: #52625b; font-size: 14px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <section id="test-controls">
+    <h1>DopaZero 자동 검증</h1>
+    <p class="note">YouTube 모바일 화면의 주요 DOM을 재현한 테스트입니다. 실제 YouTube 접속이나 iPhone Safari 실기기 검증을 대신하지 않습니다. 실제 배포 파일 <code>/dopazero-youtube.user.js</code>를 그대로 불러옵니다.</p>
+    <button id="rerun" type="button" disabled>테스트 다시 실행</button>
+    <button id="preview-home" type="button" disabled>모바일 홈 미리보기</button>
+    <button id="preview-search" type="button" disabled>검색 결과 미리보기</button>
+    <button id="preview-watch" type="button" disabled>시청 화면 미리보기</button>
+  </section>
+  <details id="test-report" aria-live="polite" open>
+    <summary id="test-summary">테스트 준비 중…</summary>
+    <ol id="test-results"></ol>
+  </details>
+  <section id="fixture-root" aria-label="재현한 YouTube 화면"></section>
+  <script src="/dopazero-youtube.user.js"></script>
+  <script>
+    'use strict';
+    const fixture = document.getElementById('fixture-root');
+    const reportPanel = document.getElementById('test-report');
+    const summary = document.getElementById('test-summary');
+    const results = document.getElementById('test-results');
+    const buttons = Array.from(document.querySelectorAll('#test-controls button'));
+    const delay = (milliseconds = 180) => new Promise(resolve => setTimeout(resolve, milliseconds));
+    const get = name => fixture.querySelector(`[data-test="${name}"]`);
+    const avatar = '<img class="avatar" data-test="avatar" alt="채널 프로필" src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2728%27 height=%2728%27%3E%3Ccircle cx=%2714%27 cy=%2714%27 r=%2714%27 fill=%27tan%27/%3E%3C/svg%3E">';
+    const header = '<header><strong>YouTube</strong><input data-test="site-search" type="search" aria-label="YouTube 검색" placeholder="검색"></header>';
+
+    function visible(element) {
+      if (!element || !element.isConnected) return false;
+      for (let current = element; current; current = current.parentElement) {
+        const style = getComputedStyle(current);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0 || current.hidden) return false;
+      }
+      return element.getClientRects().length > 0;
+    }
+    function assert(condition, message) { if (!condition) throw new Error(message); }
+    function shown(name) { assert(visible(get(name)), `${name}: 표시되어야 합니다`); }
+    function hidden(name) { assert(get(name), `${name}: 테스트 요소가 없습니다`); assert(!visible(get(name)), `${name}: 숨겨져야 합니다`); }
+    function page(expected) { assert(document.documentElement.getAttribute('data-dopazero-page') === expected, `페이지 유형이 ${expected}여야 합니다`); }
+    function card(name, { shorts = false, title = '집중해서 볼 영상', tag = 'ytm-video-with-context-renderer', desktop = false } = {}) {
+      const href = shorts ? 'https://m.youtube.com/shorts/example' : 'https://m.youtube.com/watch?v=example';
+      const thumbnail = desktop
+        ? `<ytd-thumbnail data-test="${name}-thumbnail"></ytd-thumbnail>`
+        : `<div class="video-thumbnail-container-large" data-test="${name}-thumbnail"></div>`;
+      return `<${tag} data-test="${name}"><a data-test="${name}-link" href="${href}">${thumbnail}<span data-test="${name}-title">${title}</span></a>${avatar}<span>예시 채널 · 조회수 123회</span></${tag}>`;
+    }
+    function homeMarkup() {
+      return `${header}<main><ytm-browse><div class="tab-content" tab-identifier="FEwhat_to_watch" data-test="home-root"><div data-test="home-feed">${card('home-video')}<ytm-reel-shelf-renderer data-test="home-shorts">Shorts 추천</ytm-reel-shelf-renderer></div></div></ytm-browse></main>`;
+    }
+    function searchMarkup() {
+      return `${header}<main data-test="search-results">${card('search', { title: '산책하며 듣는 차분한 음악' })}${card('short-result', { shorts: true, title: 'Shorts 예시' })}${card('normal', { title: 'Shorts라는 단어가 있는 일반 영상' })}</main>`;
+    }
+    function watchMarkup() {
+      return `${header}<main><div id="movie_player" data-test="player">▶ 재생 중인 영상</div><h2>현재 시청 중인 영상</h2><ytm-expandable-video-description-body-renderer data-test="description">영상 설명 <a data-test="description-short-link" href="https://m.youtube.com/shorts/description">설명 속 Shorts 링크</a></ytm-expandable-video-description-body-renderer><ytm-comment-thread-renderer data-test="comments">시청자의 댓글 <a data-test="comment-short-link" href="https://m.youtube.com/shorts/comment">댓글 속 링크</a></ytm-comment-thread-renderer><section data-test="playlist">재생목록${card('playlist-video', { tag: 'ytm-playlist-panel-video-renderer' })}</section><ytm-item-section-renderer section-identifier="related-items" data-test="related">추천 영상${card('related-video', { tag: 'ytm-compact-video-renderer' })}</ytm-item-section-renderer><ytm-watch-next-secondary-results-renderer data-test="secondary">다음 영상</ytm-watch-next-secondary-results-renderer></main>`;
+    }
+    async function mount(url, html) {
+      history.pushState({}, '', url);
+      fixture.innerHTML = html;
+      document.dispatchEvent(new Event('yt-navigate-finish'));
+      await delay();
+    }
+
+    const tests = [
+      ['홈 추천 피드 숨김 및 기본/집중 검색창 유지', async () => {
+        await mount('/', homeMarkup());
+        page('home'); hidden('home-feed'); shown('site-search');
+        assert(visible(document.querySelector('#dopazero-home input[type="search"]')), '집중 검색창이 표시되어야 합니다');
+      }],
+      ['홈 피드에 뒤늦게 추가되는 추천도 숨김', async () => {
+        await mount('/', homeMarkup());
+        get('home-root').insertAdjacentHTML('beforeend', '<div data-test="late-home">지연 추천 목록</div>');
+        await delay(); hidden('late-home');
+      }],
+      ['검색 제목·채널 아바타 유지 및 썸네일 숨김', async () => {
+        await mount('/results?search_query=music', searchMarkup());
+        page('other'); shown('search-title'); shown('avatar'); shown('site-search'); hidden('search-thumbnail');
+      }],
+      ['시청 페이지의 모바일 추천 컨테이너 두 종류 숨김', async () => {
+        await mount('/watch?v=example', watchMarkup());
+        page('watch'); hidden('related'); hidden('related-video-title'); hidden('secondary');
+      }],
+      ['플레이어·설명·댓글·재생목록 유지', async () => {
+        await mount('/watch?v=example&list=example', watchMarkup());
+        ['player', 'description', 'comments', 'playlist', 'playlist-video-title'].forEach(shown);
+        hidden('playlist-video-thumbnail');
+      }],
+      ['Shorts 선반과 개별 쇼츠 요소 숨김', async () => {
+        await mount('/results', `${header}<ytm-reel-shelf-renderer data-test="shelf">쇼츠 선반</ytm-reel-shelf-renderer><ytm-reel-item-renderer data-test="reel">쇼츠 영상</ytm-reel-item-renderer><ytm-shorts-shelf-renderer data-test="shorts-shelf">새 선반</ytm-shorts-shelf-renderer>`);
+        ['shelf', 'reel', 'shorts-shelf'].forEach(hidden);
+      }],
+      ['Shorts 진입 버튼·채널 탭 숨김 및 일반 탐색 유지', async () => {
+        await mount('/@example', `${header}<nav><ytm-pivot-bar-item-renderer data-test="shorts-nav"><a href="https://m.youtube.com/shorts/">Shorts</a></ytm-pivot-bar-item-renderer><ytm-pivot-bar-item-renderer data-test="subscription-nav"><a href="https://m.youtube.com/feed/subscriptions">구독</a></ytm-pivot-bar-item-renderer><yt-tab-shape tab-title="Shorts" data-test="shorts-tab">Shorts</yt-tab-shape><ytm-tab-shape data-test="channel-shorts"><a href="https://m.youtube.com/@example/shorts">채널 쇼츠</a></ytm-tab-shape></nav>`);
+        ['shorts-nav', 'shorts-tab', 'channel-shorts'].forEach(hidden); shown('subscription-nav');
+      }],
+      ['기존 탐색 항목·내부 버튼에 Shorts class만 추가하면 숨김', async () => {
+        await mount('/results', '<nav><ytm-pivot-bar-item-renderer data-test="class-nav">탐색</ytm-pivot-bar-item-renderer><ytm-pivot-bar-item-renderer data-test="class-button-nav"><button data-test="class-button">탐색</button></ytm-pivot-bar-item-renderer></nav>');
+        shown('class-nav'); shown('class-button-nav');
+        get('class-nav').classList.add('pivot-shorts');
+        get('class-button').classList.add('pivot-shorts');
+        await delay(); hidden('class-nav'); hidden('class-button-nav');
+      }],
+      ['숨긴 탐색 항목·내부 버튼의 Shorts class만 제거하면 복구', async () => {
+        await mount('/results', '<nav><ytm-pivot-bar-item-renderer class="pivot-shorts" data-test="class-nav">탐색</ytm-pivot-bar-item-renderer><ytm-pivot-bar-item-renderer data-test="class-button-nav"><button class="pivot-shorts" data-test="class-button">탐색</button></ytm-pivot-bar-item-renderer></nav>');
+        hidden('class-nav'); hidden('class-button-nav');
+        get('class-nav').classList.remove('pivot-shorts');
+        get('class-button').classList.remove('pivot-shorts');
+        await delay(); shown('class-nav'); shown('class-button-nav'); shown('class-button');
+      }],
+      ['탐색 내부 버튼의 aria-label 변경에 따라 숨김·복구', async () => {
+        await mount('/results', '<nav><ytm-pivot-bar-item-renderer data-test="label-nav"><button aria-label="구독" data-test="label-button">탐색</button></ytm-pivot-bar-item-renderer></nav>');
+        shown('label-nav');
+        get('label-button').setAttribute('aria-label', 'Shorts');
+        await delay(); hidden('label-nav'); hidden('label-button');
+        get('label-button').setAttribute('aria-label', '구독');
+        await delay(); shown('label-nav'); shown('label-button');
+      }],
+      ['검색 결과의 Shorts 영상 카드 전체 숨김', async () => {
+        await mount('/results', searchMarkup()); hidden('short-result'); hidden('short-result-title'); shown('search-title');
+      }],
+      ['제목에 Shorts라는 단어만 있는 일반 영상 유지', async () => {
+        await mount('/results', searchMarkup()); shown('normal'); shown('normal-title');
+      }],
+      ['설명·댓글 속 Shorts 링크와 본문 유지', async () => {
+        await mount('/watch?v=example', watchMarkup()); shown('description-short-link'); shown('comment-short-link');
+      }],
+      ['늦게 추가되는 Shorts 카드 감지', async () => {
+        await mount('/results', header);
+        fixture.insertAdjacentHTML('beforeend', card('late-short', { shorts: true }));
+        await delay(); hidden('late-short');
+      }],
+      ['재활용 카드: Shorts → 일반 영상이면 다시 표시', async () => {
+        await mount('/results', card('recycled', { shorts: true })); hidden('recycled');
+        get('recycled-link').href = 'https://m.youtube.com/watch?v=regular';
+        await delay(); shown('recycled'); shown('recycled-title'); hidden('recycled-thumbnail');
+      }],
+      ['재활용 카드: 일반 영상 → Shorts이면 숨김', async () => {
+        await mount('/results', card('recycled')); shown('recycled');
+        get('recycled-link').href = 'https://m.youtube.com/shorts/new';
+        await delay(); hidden('recycled');
+      }],
+      ['Shorts overlay만 삭제해도 일반 카드 복구', async () => {
+        await mount('/results', card('overlay-card'));
+        get('overlay-card').insertAdjacentHTML('beforeend', '<ytm-thumbnail-overlay-time-status-renderer data-style="SHORTS" data-test="shorts-overlay">Shorts</ytm-thumbnail-overlay-time-status-renderer>');
+        await delay(); hidden('overlay-card');
+        get('shorts-overlay').remove();
+        await delay(); shown('overlay-card'); shown('overlay-card-title');
+      }],
+      ['DOM 변경 없는 pushState URL 이동 감지', async () => {
+        await mount('/results', '<ytm-item-section-renderer section-identifier="related-items" data-test="url-related">추천</ytm-item-section-renderer>');
+        shown('url-related');
+        history.pushState({}, '', '/watch?v=route-only');
+        await delay(850); page('watch'); hidden('url-related');
+        history.pushState({}, '', '/results');
+        await delay(850); page('other'); shown('url-related');
+      }],
+      ['실제 history.back()의 popstate 처리', async () => {
+        await mount('/results?history=before', '<ytm-item-section-renderer section-identifier="related-items" data-test="back-related">추천</ytm-item-section-renderer>');
+        history.pushState({}, '', '/watch?v=history');
+        document.dispatchEvent(new Event('yt-navigate-finish')); await delay(); hidden('back-related');
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => { window.removeEventListener('popstate', done); reject(new Error('popstate 이벤트 제한시간 초과')); }, 2000);
+          function done() { clearTimeout(timeout); resolve(); }
+          window.addEventListener('popstate', done, { once: true }); history.back();
+        });
+        await delay(); page('other'); shown('back-related');
+      }],
+      ['구독 페이지는 목록·제목 유지, 썸네일만 숨김', async () => {
+        await mount('/feed/subscriptions', `${header}${card('subscribed')}`);
+        page('other'); shown('subscribed'); shown('subscribed-title'); hidden('subscribed-thumbnail');
+      }],
+      ['모바일 검색 재생목록·믹스의 썸네일 숨김 및 제목 링크 유지', async () => {
+        // The local data image includes /vi/ to exercise the source selector without a network request.
+        const image = 'data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27160%27 height=%2790%27%3E%3C!--/vi/fixture/default.jpg--%3E%3Crect width=%27160%27 height=%2790%27 fill=%27tan%27/%3E%3C/svg%3E';
+        await mount('/results', `${header}<ytm-compact-playlist-renderer data-test="search-playlist"><div class="video-thumbnail-container-compact" data-test="playlist-compact-thumbnail"></div><img src="${image}" alt="재생목록 영상 이미지" data-test="playlist-source-thumbnail"><a href="https://m.youtube.com/playlist?list=fixture" data-test="search-playlist-title">집중해서 볼 재생목록</a></ytm-compact-playlist-renderer><ytm-compact-radio-renderer data-test="search-mix"><div class="video-thumbnail-container-compact" data-test="mix-compact-thumbnail"></div><img src="${image}" alt="믹스 영상 이미지" data-test="mix-source-thumbnail"><a href="https://m.youtube.com/watch?v=fixture&list=RDfixture" data-test="search-mix-title">차분한 음악 믹스</a></ytm-compact-radio-renderer>`);
+        ['playlist-compact-thumbnail', 'playlist-source-thumbnail', 'mix-compact-thumbnail', 'mix-source-thumbnail'].forEach(hidden);
+        ['search-playlist', 'search-playlist-title', 'search-mix', 'search-mix-title'].forEach(shown);
+      }],
+      ['데스크톱 검색 썸네일 및 시청 추천 fallback', async () => {
+        await mount('/results', `${header}${card('desktop', { tag: 'ytd-video-renderer', desktop: true })}`);
+        shown('desktop-title'); hidden('desktop-thumbnail');
+        await mount('/watch?v=desktop', '<ytd-watch-flexy><div id="movie_player" data-test="desktop-player">플레이어</div><div id="related" data-test="desktop-related">추천 영상</div><ytd-watch-next-secondary-results-renderer data-test="desktop-secondary">다음 영상</ytd-watch-next-secondary-results-renderer></ytd-watch-flexy>');
+        shown('desktop-player'); hidden('desktop-related'); hidden('desktop-secondary');
+      }],
+      ['새 lockup 카드의 썸네일 숨김 및 제목·원형 아바타 유지', async () => {
+        await mount('/results', `${header}<yt-lockup-view-model data-test="yt-lockup"><a href="https://www.youtube.com/watch?v=lockup"><yt-thumbnail-view-model data-test="yt-viewmodel-thumbnail">영상 썸네일</yt-thumbnail-view-model><span data-test="yt-lockup-title">새 데스크톱 영상 제목</span></a><div class="ytContentPreviewImageViewModelHost" data-test="yt-preview-thumbnail">미리보기 이미지</div><span class="avatar ytContentPreviewImageViewModelHost ytContentPreviewImageViewModelCircleImage" data-test="yt-circle-avatar">채</span></yt-lockup-view-model><ytm-lockup-view-model data-test="ytm-lockup"><a href="https://m.youtube.com/watch?v=lockup"><ytm-thumbnail-view-model data-test="ytm-viewmodel-thumbnail">영상 썸네일</ytm-thumbnail-view-model><div class="ytThumbnailViewModelHost" data-test="ytm-host-thumbnail">새 썸네일</div><span data-test="ytm-lockup-title">새 모바일 영상 제목</span></a><span class="avatar ytContentPreviewImageViewModelHost ytContentPreviewImageViewModelCircleImage" data-test="ytm-circle-avatar">채</span></ytm-lockup-view-model>`);
+        ['yt-viewmodel-thumbnail', 'yt-preview-thumbnail', 'ytm-viewmodel-thumbnail', 'ytm-host-thumbnail'].forEach(hidden);
+        ['yt-lockup-title', 'yt-circle-avatar', 'ytm-lockup-title', 'ytm-circle-avatar'].forEach(shown);
+      }],
+      ['데스크톱 홈 피드 숨김 및 집중 검색창 제공', async () => {
+        await mount('/', `${header}<ytd-browse page-subtype="home"><div data-test="desktop-feed">추천 피드</div></ytd-browse>`);
+        hidden('desktop-feed'); shown('site-search');
+        assert(visible(document.querySelector('ytd-browse #dopazero-home input')), '데스크톱 홈 검색창이 필요합니다');
+      }],
+      ['모바일 홈 root 교체 시 검색창 재생성', async () => {
+        await mount('/', homeMarkup());
+        const oldPanel = document.getElementById('dopazero-home');
+        fixture.querySelector('ytm-browse').outerHTML = '<ytm-browse data-test="new-home-root"><section data-test="new-home-feed">교체된 추천 피드</section></ytm-browse>';
+        await delay();
+        assert(!oldPanel.isConnected, '이전 검색창이 제거되어야 합니다');
+        assert(visible(get('new-home-root').querySelector('#dopazero-home input')), '새 root에 검색창이 있어야 합니다');
+        assert(document.querySelectorAll('#dopazero-home').length === 1, '검색창이 중복되면 안 됩니다');
+        hidden('new-home-feed');
+      }],
+      ['늦게 생성된 홈 탭으로 검색창을 이동해도 표시 유지', async () => {
+        await mount('/', `${header}<ytm-browse data-test="temporary-home"><div data-test="temporary-feed">먼저 도착한 추천</div></ytm-browse>`);
+        assert(visible(get('temporary-home').querySelector('#dopazero-home input')), '임시 root 검색창이 필요합니다');
+        hidden('temporary-feed');
+        get('temporary-home').insertAdjacentHTML('beforeend', '<div class="tab-content" tab-identifier="FEwhat_to_watch" data-test="delayed-tab"><div data-test="delayed-tab-feed">나중에 도착한 추천</div></div>');
+        await delay();
+        assert(visible(get('delayed-tab').querySelector('#dopazero-home input')), '새 홈 탭 검색창이 보여야 합니다');
+        assert(document.querySelectorAll('#dopazero-home').length === 1, '검색창이 중복되면 안 됩니다');
+        hidden('temporary-feed'); hidden('delayed-tab-feed');
+      }],
+      ['스타일 태그 삭제 후 자동 복구', async () => {
+        await mount('/results', searchMarkup());
+        const style = document.getElementById('dopazero-youtube-style');
+        assert(style, '스타일 태그가 있어야 합니다'); style.remove(); await delay();
+        assert(document.getElementById('dopazero-youtube-style'), '스타일이 다시 추가되어야 합니다');
+        hidden('search-thumbnail'); hidden('short-result'); shown('search-title');
+      }],
+    ];
+
+    async function run() {
+      buttons.forEach(button => { button.disabled = true; });
+      reportPanel.open = true;
+      summary.className = '';
+      window.dopaZeroTestResults = { completed: false };
+      results.replaceChildren();
+      const report = [];
+      summary.textContent = `검증 중… 0 / ${tests.length}`;
+      for (const [name, test] of tests) {
+        const row = document.createElement('li');
+        try {
+          await test(); row.className = 'pass'; row.textContent = `PASS · ${name}`; report.push({ name, status: 'PASS' });
+        } catch (error) {
+          row.className = 'fail'; row.textContent = `FAIL · ${name} — ${error.message}`; report.push({ name, status: 'FAIL', error: error.message });
+        }
+        results.append(row);
+        summary.textContent = `검증 중… ${report.length} / ${tests.length}`;
+      }
+      const passed = report.filter(test => test.status === 'PASS').length;
+      const failed = report.length - passed;
+      summary.textContent = `${failed ? 'FAIL' : 'PASS'} · ${passed}/${report.length} 통과${failed ? ` · ${failed}개 실패` : ''}`;
+      summary.className = failed ? 'fail' : 'pass';
+      reportPanel.open = failed > 0;
+      // Readable by browser tools; this reports fixture results only.
+      window.dopaZeroTestResults = { completed: true, passed, failed, total: report.length, tests: report };
+      await mount('/', homeMarkup());
+      buttons.forEach(button => { button.disabled = false; });
+    }
+
+    async function preview(url, html) {
+      await mount(url, html);
+      fixture.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    document.getElementById('rerun').addEventListener('click', run);
+    document.getElementById('preview-home').addEventListener('click', () => preview('/', homeMarkup()));
+    document.getElementById('preview-search').addEventListener('click', () => preview('/results?search_query=music', searchMarkup()));
+    document.getElementById('preview-watch').addEventListener('click', () => preview('/watch?v=example', watchMarkup()));
+    // Keep preview interactions in this local fixture; never follow mock external video links.
+    fixture.addEventListener('click', event => {
+      const anchor = event.target.closest('a[href]');
+      if (!anchor) return;
+      event.preventDefault();
+      const url = new URL(anchor.href);
+      if (url.pathname === '/feed/subscriptions') mount('/feed/subscriptions', `${header}${card('subscribed')}`);
+      else if (url.pathname === '/watch') mount('/watch?v=example', watchMarkup());
+    });
+    fixture.addEventListener('submit', event => {
+      event.preventDefault();
+      const query = new FormData(event.target).get('search_query');
+      if (String(query || '').trim()) mount(`/results?search_query=${encodeURIComponent(query)}`, searchMarkup());
+    });
+    run();
+  </script>
+</body>
+</html>
