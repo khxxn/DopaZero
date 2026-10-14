@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DopaZero - YouTube 집중 모드
 // @namespace    dopazero.local
-// @version      1.0.1
+// @version      1.0.2
 // @description  홈 추천 피드, 영상 썸네일, 시청 페이지 추천 영상과 Shorts 진입점을 숨깁니다.
 // @match        https://m.youtube.com/*
 // @match        https://www.youtube.com/*
@@ -80,9 +80,9 @@
     'ytd-text-inline-expander', '#movie_player', '#player-container-id',
   ].join(',');
 
-  const thumbnailRules = VIDEO_CARDS.flatMap(card =>
-    THUMBNAILS.map(thumbnail => `${card} ${thumbnail}`)
-  ).join(',\n');
+  // Keep the stylesheet small: the same card/thumbnail combinations need
+  // only two selector lists, not hundreds of expanded descendant rules.
+  const thumbnailRules = `:is(${VIDEO_CARDS.join(',')}) :is(${THUMBNAILS.join(',')})`;
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
@@ -92,6 +92,7 @@
 
     html[${PAGE_ATTR}="home"] .tab-content[tab-identifier="FEwhat_to_watch"] > :not(#${PANEL_ID}),
     html[${PAGE_ATTR}="home"] ytd-browse[page-subtype="home"] > :not(#${PANEL_ID}),
+    html[${PAGE_ATTR}="home"] ytm-browse > :not(#${PANEL_ID}):not([${HOME_BRANCH_ATTR}]),
     html[${PAGE_ATTR}="home"] [${HOME_ATTR}] > :not(#${PANEL_ID}):not([${HOME_BRANCH_ATTR}]) {
       display: none !important;
     }
@@ -176,6 +177,8 @@
   let fullScanNeeded = true;
   const pendingRoots = new Set();
   const hiddenShorts = new Set();
+  let homePath = [];
+  let homePanel = null;
 
   function currentPath() {
     return location.pathname.replace(/\/+$/, '') || '/';
@@ -224,26 +227,45 @@
   }
 
   function addHomeSearch() {
-    if (document.documentElement.getAttribute(PAGE_ATTR) !== 'home') return;
+    if (document.documentElement.getAttribute(PAGE_ATTR) !== 'home') {
+      homePath = [];
+      homePanel = null;
+      return;
+    }
     const root = document.querySelector('.tab-content[tab-identifier="FEwhat_to_watch"]')
       || document.querySelector('ytd-browse[page-subtype="home"]')
       || document.querySelector('ytm-browse');
-    if (!root) return;
+    if (!root) {
+      homePath = [];
+      homePanel = null;
+      return;
+    }
+    const browse = root.closest('ytm-browse');
+    const path = [root];
+    let branch = root;
+    while (browse && branch !== browse) {
+      branch = branch.parentElement;
+      path.push(branch);
+    }
+    // YouTube mutates its DOM frequently. Leave a healthy home branch alone,
+    // but still detect a late home tab, reparented root or replaced search panel.
+    if (homePanel?.parentElement === root && path.length === homePath.length
+      && path.every((node, index) => node === homePath[index]
+        && node.hasAttribute(HOME_ATTR)
+        && (index === path.length - 1 || node.hasAttribute(HOME_BRANCH_ATTR)))) return;
     // Keep only the branch leading to the real home tab. This also hides a
     // fallback feed that YouTube has not removed from its old browse wrapper.
     document.querySelectorAll(`[${HOME_ATTR}], [${HOME_BRANCH_ATTR}]`).forEach(previousRoot => {
       previousRoot.removeAttribute(HOME_ATTR);
       previousRoot.removeAttribute(HOME_BRANCH_ATTR);
     });
-    root.setAttribute(HOME_ATTR, '');
-    const browse = root.closest('ytm-browse');
-    let branch = root;
-    while (browse && branch !== browse) {
-      branch.setAttribute(HOME_BRANCH_ATTR, '');
-      branch = branch.parentElement;
-      branch.setAttribute(HOME_ATTR, '');
-    }
-    if (root.querySelector(`#${PANEL_ID}`)) return;
+    path.forEach((node, index) => {
+      node.setAttribute(HOME_ATTR, '');
+      if (index < path.length - 1) node.setAttribute(HOME_BRANCH_ATTR, '');
+    });
+    homePath = path;
+    homePanel = root.querySelector(`#${PANEL_ID}`);
+    if (homePanel) return;
     // YouTube can replace its home container during navigation.
     document.getElementById(PANEL_ID)?.remove();
     const panel = document.createElement('section');
@@ -299,12 +321,20 @@
     subscriptions.textContent = '구독 영상 보러 가기';
     panel.append(brand, heading, description, form, subscriptions);
     root.prepend(panel);
+    homePanel = panel;
+  }
+
+  function syncVisiblePage() {
+    if (!style.isConnected) document.documentElement.append(style);
+    // Remember navigation for the later Shorts scan even though the visible
+    // page state is updated right now, before the next timer or paint.
+    if (updateRoute()) fullScanNeeded = true;
+    addHomeSearch();
   }
 
   function refresh() {
     scheduled = 0;
-    if (!style.isConnected) document.documentElement.append(style);
-    const routeChanged = updateRoute();
+    syncVisiblePage();
     // Recycled cards and nav items must become visible again if they stop being Shorts.
     for (const element of hiddenShorts) {
       if (!element.isConnected || !hasShortsContent(element)) {
@@ -312,14 +342,13 @@
         hiddenShorts.delete(element);
       }
     }
-    if (routeChanged || fullScanNeeded) {
+    if (fullScanNeeded) {
       scanShorts(document);
     } else {
       for (const root of pendingRoots) scanShorts(root);
     }
     pendingRoots.clear();
     fullScanNeeded = false;
-    addHomeSearch();
   }
 
   function schedule(fullScan = false) {
@@ -328,9 +357,9 @@
   }
 
   function start() {
-    updateRoute();
-    document.documentElement.append(style);
-    refresh();
+    syncVisiblePage();
+    // CSS and the search panel take priority over scanning all existing links.
+    schedule(true);
     new MutationObserver(records => {
       for (const record of records) {
         if (record.type === 'attributes') {
@@ -353,7 +382,10 @@
           }
         }
       }
-      if (pendingRoots.size || currentPath() !== previousPath || !style.isConnected) schedule();
+      if (pendingRoots.size || currentPath() !== previousPath || !style.isConnected) {
+        syncVisiblePage();
+        schedule();
+      }
     }).observe(document.documentElement, {
       subtree: true, childList: true, attributes: true,
       attributeOldValue: true,
@@ -361,17 +393,21 @@
     });
     // Events + DOM observation work in Userscripts' isolated content context.
     // The lightweight URL check also covers pushState without DOM changes.
+    function restorePage() {
+      syncVisiblePage();
+      schedule(true);
+    }
     ['yt-navigate-finish', 'yt-page-data-updated', 'yt-navigate-start'].forEach(name => {
-      document.addEventListener(name, () => schedule(true));
+      document.addEventListener(name, restorePage);
     });
     ['popstate', 'hashchange', 'pageshow'].forEach(name => {
-      window.addEventListener(name, () => schedule(true));
+      window.addEventListener(name, restorePage);
     });
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) schedule(true);
+      if (!document.hidden) restorePage();
     });
     window.setInterval(() => {
-      if (!document.hidden && currentPath() !== previousPath) schedule(true);
+      if (!document.hidden && currentPath() !== previousPath) restorePage();
     }, 500);
   }
 
