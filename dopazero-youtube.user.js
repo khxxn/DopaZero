@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DopaZero - YouTube 집중 모드
 // @namespace    dopazero.local
-// @version      1.0.2
+// @version      1.0.3
 // @description  홈 추천 피드, 영상 썸네일, 시청 페이지 추천 영상과 Shorts 진입점을 숨깁니다.
 // @match        https://m.youtube.com/*
 // @match        https://www.youtube.com/*
@@ -36,16 +36,21 @@
     'ytd-compact-video-renderer', 'ytd-playlist-video-renderer',
     'ytd-playlist-panel-video-renderer', 'yt-lockup-view-model',
   ];
-  const THUMBNAILS = [
+  const THUMBNAIL_BOXES = [
     '.video-thumbnail-container-large', '.video-thumbnail-container-compact',
     '.video-thumbnail-container-compact-rounded', '.media-item-thumbnail-container',
     '.thumbnail-cover', '.thumbnail-cover-rounded', 'ytm-thumbnail-cover',
     'ytm-thumbnail-view-model', 'yt-thumbnail-view-model', 'ytd-thumbnail',
     '.ytThumbnailViewModelHost',
     '.ytContentPreviewImageViewModelHost:not(.ytContentPreviewImageViewModelCircleImage)',
+  ];
+  // Every channel serves video thumbnails from these image paths. Avatars and
+  // banners use yt3.* images, so matching the path is safe on any layout.
+  const VIDEO_IMAGES = [
     'img[src*="/vi/"]', 'img[src*="/vi_webp/"]',
     'img[src*="/an_webp/"]', 'img[data-thumb*="/vi/"]',
   ];
+  const THUMBNAILS = [...THUMBNAIL_BOXES, ...VIDEO_IMAGES];
   const SHORTS_SURFACES = [
     'ytm-reel-shelf-renderer', 'ytm-reel-item-renderer',
     'ytm-shorts-shelf-renderer', 'ytm-shorts-lockup-view-model',
@@ -79,16 +84,39 @@
     'ytd-comment-view-model', 'ytm-expandable-video-description-body-renderer',
     'ytd-text-inline-expander', '#movie_player', '#player-container-id',
   ].join(',');
+  // Channel shelves can use different card renderers. Known video links are
+  // also a safe thumbnail scope; leave their text and surrounding shelf alone.
+  // Keep these separate from VIDEO_CARDS so a trailer's description cannot
+  // cause its entire featured section to be treated as a Shorts card.
+  const THUMBNAIL_SCOPES = [
+    ...VIDEO_CARDS,
+    'ytm-channel-featured-video-renderer', 'ytd-channel-featured-content-renderer',
+    'a[href^="/watch?"]', 'a[href^="https://m.youtube.com/watch?"]',
+    'a[href^="https://www.youtube.com/watch?"]', 'a[href^="https://youtube.com/watch?"]',
+  ];
+  const PRESERVE_THUMBNAILS = [
+    PRESERVE_CONTENT, '#c4-player',
+    'ytm-backstage-post-renderer', 'ytd-backstage-post-renderer',
+  ].join(',');
 
   // Keep the stylesheet small: the same card/thumbnail combinations need
   // only two selector lists, not hundreds of expanded descendant rules.
-  const thumbnailRules = `:is(${VIDEO_CARDS.join(',')}) :is(${THUMBNAILS.join(',')})`;
+  const notPreserved = `:not(:is(${PRESERVE_THUMBNAILS}), :is(${PRESERVE_THUMBNAILS}) *)`;
+  const thumbnailRules = `:is(${THUMBNAIL_SCOPES.join(',')}) :is(${THUMBNAILS.join(',')})${notPreserved}`;
+  // Shelves outside the known cards (signed-in "For You", playlist header...)
+  // still use the same video images. Hide those, and their thumbnail box once
+  // it holds one; a channel avatar in the same box type stays visible.
+  const videoImageRules = `:is(${VIDEO_IMAGES.join(',')})${notPreserved}`;
+  const videoBoxRules = `:is(${THUMBNAIL_BOXES.join(',')}):has(${VIDEO_IMAGES.join(',')})${notPreserved}`;
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
     /* Declarative rules also cover lazy-loaded cards before JS rescans. */
     ${thumbnailRules},
+    ${videoImageRules},
     ${SHORTS_SURFACES.join(',\n')} { display: none !important; }
+    /* A separate rule: a browser without :has() drops only this one. */
+    ${videoBoxRules} { display: none !important; }
 
     html[${PAGE_ATTR}="home"] .tab-content[tab-identifier="FEwhat_to_watch"] > :not(#${PANEL_ID}),
     html[${PAGE_ATTR}="home"] ytd-browse[page-subtype="home"] > :not(#${PANEL_ID}),

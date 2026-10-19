@@ -29,7 +29,11 @@
       ytm-comment-thread-renderer, ytm-expandable-video-description-body-renderer,
       ytm-pivot-bar-item-renderer, yt-tab-shape, ytm-tab-shape, ytd-thumbnail,
       yt-lockup-view-model, ytm-lockup-view-model, yt-thumbnail-view-model, ytm-thumbnail-view-model,
-      ytm-compact-playlist-renderer, ytm-compact-radio-renderer) { display: block; }
+      ytm-compact-playlist-renderer, ytm-compact-radio-renderer,
+      ytm-channel-featured-video-renderer, ytd-channel-featured-content-renderer,
+      ytm-backstage-post-renderer, ytd-backstage-post-renderer,
+      ytm-shelf-renderer, ytm-unlisted-card-renderer, ytm-compact-channel-renderer,
+      yt-page-header-view-model, yt-content-preview-image-view-model) { display: block; }
     #fixture-root :is(ytm-video-with-context-renderer, ytm-video-renderer, ytd-video-renderer,
       ytm-compact-video-renderer, ytd-compact-video-renderer, ytm-playlist-panel-video-renderer) { padding: 16px 0; border-bottom: 1px solid #eee; }
     #fixture-root [data-test$="title"] { display: block; padding: 6px 0; font-size: 17px; font-weight: 600; }
@@ -38,6 +42,7 @@
     }
     .avatar { width: 28px; height: 28px; vertical-align: middle; border-radius: 50%; margin-right: 8px; background: #e0b585; }
     #movie_player { padding: 35px 15px; background: #182424; color: white; }
+    .channel-banner { width: 100%; height: 72px; object-fit: cover; border-radius: 8px; }
     .note { color: #52625b; font-size: 14px; line-height: 1.6; }
   </style>
   <script src="/dopazero-youtube.user.js"></script>
@@ -60,6 +65,7 @@
     <button id="preview-home" type="button" disabled>모바일 홈 미리보기</button>
     <button id="preview-search" type="button" disabled>검색 결과 미리보기</button>
     <button id="preview-watch" type="button" disabled>시청 화면 미리보기</button>
+    <button id="preview-channel" type="button" disabled>채널 홈 재현 미리보기</button>
   </section>
   <details id="test-report" aria-live="polite" open>
     <summary id="test-summary">테스트 준비 중…</summary>
@@ -77,6 +83,10 @@
     const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
     const get = name => fixture.querySelector(`[data-test="${name}"]`);
     const avatar = '<img class="avatar" data-test="avatar" alt="채널 프로필" src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2728%27 height=%2728%27%3E%3Ccircle cx=%2714%27 cy=%2714%27 r=%2714%27 fill=%27tan%27/%3E%3C/svg%3E">';
+    // Local SVG with a video-image path marker; no remote image request is made.
+    const channelImage = 'data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27160%27 height=%2790%27%3E%3C!--/vi/fixture/default.jpg--%3E%3Crect width=%27160%27 height=%2790%27 fill=%27%23a8aaa5%27/%3E%3C/svg%3E';
+    // Banners, avatars and outside images never use the /vi/ video path (yt3.* etc.).
+    const nonVideoImage = 'data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27160%27 height=%2790%27%3E%3C!--yt3/fixture/banner--%3E%3Crect width=%27160%27 height=%2790%27 fill=%27%23c9b8a6%27/%3E%3C/svg%3E';
     const header = '<header><strong>YouTube</strong><input data-test="site-search" type="search" aria-label="YouTube 검색" placeholder="검색"></header>';
 
     function visible(element) {
@@ -106,6 +116,14 @@
     }
     function watchMarkup() {
       return `${header}<main><div id="movie_player" data-test="player">▶ 재생 중인 영상</div><h2>현재 시청 중인 영상</h2><ytm-expandable-video-description-body-renderer data-test="description">영상 설명 <a data-test="description-short-link" href="https://m.youtube.com/shorts/description">설명 속 Shorts 링크</a></ytm-expandable-video-description-body-renderer><ytm-comment-thread-renderer data-test="comments">시청자의 댓글 <a data-test="comment-short-link" href="https://m.youtube.com/shorts/comment">댓글 속 링크</a></ytm-comment-thread-renderer><section data-test="playlist">재생목록${card('playlist-video', { tag: 'ytm-playlist-panel-video-renderer' })}</section><ytm-item-section-renderer section-identifier="related-items" data-test="related">추천 영상${card('related-video', { tag: 'ytm-compact-video-renderer' })}</ytm-item-section-renderer><ytm-watch-next-secondary-results-renderer data-test="secondary">다음 영상</ytm-watch-next-secondary-results-renderer></main>`;
+    }
+    // Signed-in channel homes add a "For You" shelf. Its card tag is not in the
+    // script's card list, so only the shared video image path identifies it.
+    function forYouShelf() {
+      return `<ytm-shelf-renderer data-test="for-you-shelf"><h3>추천</h3><div><ytm-unlisted-card-renderer><div role="button"><yt-thumbnail-view-model class="ytThumbnailViewModelHost" data-test="for-you-thumbnail"><div class="ytThumbnailViewModelImage"><img src="${channelImage}" alt=""></div><span data-test="for-you-duration">17:46</span></yt-thumbnail-view-model></div><h4 data-test="for-you-title">추천 선반의 영상 제목</h4><span>조회수 46만회 · 1년 전</span></ytm-unlisted-card-renderer><ytm-unlisted-card-renderer><div class="unlisted-image"><img src="${channelImage}" alt="" data-test="for-you-unknown-image"></div><h4 data-test="for-you-unknown-title">처음 보는 썸네일 상자의 영상</h4></ytm-unlisted-card-renderer></div></ytm-shelf-renderer>`;
+    }
+    function channelMarkup() {
+      return `${header}<main><p class="note">채널 홈의 검증용 재현 화면 · 실제 YouTube 화면이 아닙니다.</p><img class="channel-banner" src="${nonVideoImage}" data-test="channel-banner" alt="예시 채널 배너"><h2>${avatar}예시 채널</h2><nav><span>홈</span><span>동영상</span></nav><h3>추천 영상</h3><ytm-channel-featured-video-renderer data-test="channel-featured"><div class="video-thumbnail-container-large" data-test="channel-featured-thumbnail"><img src="${channelImage}" alt="대표 영상 썸네일"></div><a href="/watch?v=featured" data-test="channel-featured-title">천천히 배우는 영상 편집</a><span>예시 채널 · 조회수 123회</span><div id="movie_player" data-test="channel-player"><img src="${channelImage}" data-test="channel-player-poster" alt="재생 화면 이미지"><p>▶ 채널 대표 영상 플레이어</p></div></ytm-channel-featured-video-renderer><section data-test="channel-shelf"><a href="/watch?v=relative" data-test="channel-relative-link"><div class="thumbnail-cover" data-test="channel-relative-thumbnail"><img src="${channelImage}" alt="영상 썸네일"></div><span data-test="channel-relative-title">집중해서 듣는 이야기</span></a><a href="https://m.youtube.com/watch?v=absolute" data-test="channel-mobile-link"><div class="video-thumbnail-container-compact" data-test="channel-mobile-thumbnail"></div><span data-test="channel-mobile-title">산책하며 듣는 음악</span></a></section>${forYouShelf()}</main>`;
     }
     async function mount(url, html) {
       history.pushState({}, '', url);
@@ -286,6 +304,52 @@
         ['yt-viewmodel-thumbnail', 'yt-preview-thumbnail', 'ytm-viewmodel-thumbnail', 'ytm-host-thumbnail'].forEach(hidden);
         ['yt-lockup-title', 'yt-circle-avatar', 'ytm-lockup-title', 'ytm-circle-avatar'].forEach(shown);
       }],
+      ['채널 홈 대표 영상 썸네일 숨김 및 제목·배너·프로필·플레이어 유지', async () => {
+        await mount('/@example/featured', channelMarkup());
+        page('other'); hidden('channel-featured-thumbnail');
+        ['channel-featured', 'channel-featured-title', 'channel-banner', 'avatar', 'channel-player', 'channel-player-poster'].forEach(shown);
+      }],
+      ['카드 태그 없는 채널 영상 링크의 썸네일 숨김 및 외부 링크 이미지 유지', async () => {
+        await mount('/@example/featured', `${channelMarkup()}<a href="https://example.com/watch?v=external" data-test="external-link"><div class="thumbnail-cover" data-test="external-thumbnail"><img src="${nonVideoImage}" alt="외부 링크 이미지"></div><span data-test="external-title">외부 자료</span></a>`);
+        ['channel-relative-thumbnail', 'channel-mobile-thumbnail'].forEach(hidden);
+        ['channel-relative-link', 'channel-relative-title', 'channel-mobile-link', 'channel-mobile-title', 'external-link', 'external-thumbnail', 'external-title'].forEach(shown);
+      }],
+      ['뒤늦게 추가되는 채널 영상 썸네일은 타이머 전에 즉시 숨김', async () => {
+        await mount('/@example/featured', header);
+        fixture.insertAdjacentHTML('beforeend', `<section><a href="https://www.youtube.com/watch?v=late-channel" data-test="late-channel-link"><yt-thumbnail-view-model data-test="late-channel-thumbnail"><img src="${channelImage}" alt="나중에 로드된 영상 썸네일"></yt-thumbnail-view-model><span data-test="late-channel-title">나중에 도착한 영상</span></a></section>`);
+        // Declarative CSS must handle this before a mutation callback or timer.
+        hidden('late-channel-thumbnail'); shown('late-channel-link'); shown('late-channel-title');
+      }],
+      ['채널 데스크톱 lockup·대표 영상 썸네일 숨김 및 커뮤니티·대표 플레이어 유지', async () => {
+        await mount('/@example/featured', `${header}<yt-lockup-view-model><a class="ytLockupViewModelContentImage" href="https://youtube.com/watch?v=desktop-channel"><yt-thumbnail-view-model data-test="channel-desktop-thumbnail"><img src="${channelImage}" alt="데스크톱 영상 썸네일"></yt-thumbnail-view-model></a><a href="https://youtube.com/watch?v=desktop-channel" data-test="channel-desktop-title">데스크톱 채널 영상 제목</a></yt-lockup-view-model><ytd-channel-featured-content-renderer><ytd-thumbnail data-test="channel-desktop-featured-thumbnail"></ytd-thumbnail><a href="/watch?v=desktop-featured" data-test="channel-desktop-featured-title">채널 대표 영상 제목</a><div id="c4-player" data-test="channel-desktop-player"><img src="${channelImage}" data-test="channel-desktop-poster" alt="대표 영상 플레이어 이미지"></div></ytd-channel-featured-content-renderer><ytm-backstage-post-renderer><a href="/watch?v=community"><div class="thumbnail-cover" data-test="channel-mobile-community-image"><img src="${channelImage}" alt="모바일 커뮤니티 이미지"></div><span data-test="channel-mobile-community-title">모바일 커뮤니티 게시글</span></a></ytm-backstage-post-renderer><ytd-backstage-post-renderer><a href="https://www.youtube.com/watch?v=community"><div class="thumbnail-cover" data-test="channel-desktop-community-image"><img src="${channelImage}" alt="데스크톱 커뮤니티 이미지"></div><span data-test="channel-desktop-community-title">데스크톱 커뮤니티 게시글</span></a></ytd-backstage-post-renderer>`);
+        ['channel-desktop-thumbnail', 'channel-desktop-featured-thumbnail'].forEach(hidden);
+        ['channel-desktop-title', 'channel-desktop-featured-title', 'channel-desktop-player', 'channel-desktop-poster', 'channel-mobile-community-image', 'channel-mobile-community-title', 'channel-desktop-community-image', 'channel-desktop-community-title'].forEach(shown);
+      }],
+      ['실제 모바일 채널 대표 영상 구조의 썸네일 숨김 및 제목 유지', async () => {
+        // Same nesting as the m.youtube.com channel home: the box sits inside the video link.
+        await mount('/@example', `${header}<ytm-item-section-renderer><ytm-channel-featured-video-renderer class="item" data-test="real-featured"><a href="/watch?v=featured"><ytm-thumbnail-cover class="video-thumbnail-container-large rounded-thumbnail" data-test="real-featured-thumbnail"><div class="video-thumbnail-img video-thumbnail-bg"></div><img class="video-thumbnail-img" alt="" src="${channelImage}"><div class="video-preview-shim"></div></ytm-thumbnail-cover><h3 data-test="real-featured-title">채널 대표 영상 제목</h3></a></ytm-channel-featured-video-renderer></ytm-item-section-renderer>`);
+        hidden('real-featured-thumbnail'); shown('real-featured'); shown('real-featured-title');
+      }],
+      ['목록에 없는 추천 선반 카드도 영상 이미지 주소로 썸네일 숨김', async () => {
+        await mount('/@example/featured', `${header}${forYouShelf()}`);
+        ['for-you-thumbnail', 'for-you-duration', 'for-you-unknown-image'].forEach(hidden);
+        ['for-you-shelf', 'for-you-title', 'for-you-unknown-title'].forEach(shown);
+        // Lazy cards get their image address later; CSS must react without a rescan.
+        fixture.insertAdjacentHTML('beforeend', '<ytm-unlisted-card-renderer><yt-thumbnail-view-model data-test="lazy-for-you-thumbnail"><img data-test="lazy-for-you-image" alt=""></yt-thumbnail-view-model><h4 data-test="lazy-for-you-title">나중에 이미지가 채워지는 영상</h4></ytm-unlisted-card-renderer>');
+        get('lazy-for-you-image').src = channelImage;
+        hidden('lazy-for-you-thumbnail'); shown('lazy-for-you-title');
+      }],
+      ['검색 결과 채널 카드의 프로필 사진은 썸네일 상자 안에서도 유지', async () => {
+        // m.youtube.com reuses the compact thumbnail box for a channel's avatar.
+        await mount('/results?search_query=example', `${header}<ytm-item-section-renderer><ytm-compact-channel-renderer data-test="channel-card"><a href="/@example"><ytm-compact-thumbnail class="video-thumbnail-container-compact" data-test="channel-card-avatar"><img src="${nonVideoImage}" alt="채널 프로필"></ytm-compact-thumbnail></a><a href="/@example" data-test="channel-card-title">예시 채널</a></ytm-compact-channel-renderer>${card('channel-search', { tag: 'ytm-compact-video-renderer' })}</ytm-item-section-renderer>`);
+        ['channel-card', 'channel-card-avatar', 'channel-card-title', 'channel-search-title'].forEach(shown);
+        hidden('channel-search-thumbnail');
+      }],
+      ['재생목록 머리글의 대표 이미지·배경 숨김 및 제목·프로필 유지', async () => {
+        await mount('/playlist?list=example', `${header}<yt-page-header-view-model data-test="playlist-header"><div><cinematic-container-view-model><img src="${channelImage}" alt="" data-test="playlist-cinematic"></cinematic-container-view-model></div><div><yt-content-preview-image-view-model class="ytContentPreviewImageViewModelHost" data-test="playlist-cover"><img src="${channelImage}" alt="재생목록 대표 이미지"></yt-content-preview-image-view-model><h1 data-test="playlist-title">예시 재생목록</h1>${avatar}</div></yt-page-header-view-model>`);
+        page('other'); ['playlist-cover', 'playlist-cinematic'].forEach(hidden);
+        ['playlist-header', 'playlist-title', 'avatar'].forEach(shown);
+      }],
       ['데스크톱 홈 피드 숨김 및 집중 검색창 제공', async () => {
         await mount('/', `${header}<ytd-browse page-subtype="home"><div data-test="desktop-feed">추천 피드</div></ytd-browse>`);
         hidden('desktop-feed'); shown('site-search');
@@ -357,6 +421,7 @@
     document.getElementById('preview-home').addEventListener('click', () => preview('/', homeMarkup()));
     document.getElementById('preview-search').addEventListener('click', () => preview('/results?search_query=music', searchMarkup()));
     document.getElementById('preview-watch').addEventListener('click', () => preview('/watch?v=example', watchMarkup()));
+    document.getElementById('preview-channel').addEventListener('click', () => preview('/@example/featured', channelMarkup()));
     // Keep preview interactions in this local fixture; never follow mock external video links.
     fixture.addEventListener('click', event => {
       const anchor = event.target.closest('a[href]');
