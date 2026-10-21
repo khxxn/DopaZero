@@ -44,6 +44,29 @@
     #movie_player { padding: 35px 15px; background: #182424; color: white; }
     .channel-banner { width: 100%; height: 72px; object-fit: cover; border-radius: 8px; }
     .note { color: #52625b; font-size: 14px; line-height: 1.6; }
+    /* Copied from m.youtube.com (2026-10-20, 375px wide): only the rules the
+       duration and channel-home layout checks measure. */
+    #fixture-root .YtmCompactMediaItemStats { display: inline-block; white-space: nowrap; }
+    #fixture-root .YtmCompactMediaItemStats ~ .YtmCompactMediaItemStats::before { content: " · "; }
+    #fixture-root .yt-mimic { font: 12px Roboto, Arial, sans-serif; color: #0f0f0f; }
+    #fixture-root .yt-mimic a { color: inherit; }
+    #fixture-root .yt-mimic :is(lazy-list, ytm-vertical-list-renderer) { display: block; }
+    #fixture-root .yt-mimic ytm-item-section-renderer { border-bottom: 1px solid rgba(0, 0, 0, .1); }
+    #fixture-root .yt-mimic ytm-channel-featured-video-renderer { margin: 12px 0; padding: 0 12px; }
+    #fixture-root .yt-mimic ytm-channel-featured-video-renderer > a { display: block; }
+    #fixture-root .yt-mimic .YtmChannelFeaturedVideoRendererTitle { display: flex; margin: 12px 0 3px; font-size: 14px; font-weight: 400; line-height: 17.5px; }
+    #fixture-root .yt-mimic ytm-shelf-renderer { border-top: 1px solid rgba(0, 0, 0, .2); padding-top: 12px; }
+    #fixture-root .yt-mimic .shelf-header { display: flex; align-items: center; padding: 0 12px; margin-bottom: 8px; }
+    #fixture-root .yt-mimic .shelf-header-endpoint { display: flex; align-items: center; flex-grow: 1; }
+    #fixture-root .yt-mimic .shelf-title-bar { flex-grow: 1; }
+    #fixture-root .yt-mimic .shelf-title { margin: 0 0 3px; font-size: 18px; font-weight: 700; line-height: 26px; }
+    #fixture-root .yt-mimic ytm-compact-video-renderer { margin: 12px 0; padding: 0; border: 0; }
+    #fixture-root .yt-mimic .YtmCompactMediaItemHost { display: flex; padding: 0 12px; }
+    #fixture-root .yt-mimic .YtmCompactMediaItemImage { display: block; flex-shrink: 0; }
+    #fixture-root .yt-mimic .YtmCompactMediaItemMetadata { display: flex; flex-grow: 1; min-width: 0; }
+    #fixture-root .yt-mimic .YtmCompactMediaItemMetadataContent { display: block; flex-grow: 1; min-width: 0; padding: 0 8px; }
+    #fixture-root .yt-mimic .YtmCompactMediaItemHeadline { margin: 0; font-size: 14px; font-weight: 400; line-height: 1.25; }
+    #fixture-root .yt-mimic .YtmCompactMediaItemSubhead { font-size: 12px; line-height: 1.25; opacity: .6; }
   </style>
   <script src="/dopazero-youtube.user.js"></script>
   <script>
@@ -125,6 +148,39 @@
     function channelMarkup() {
       return `${header}<main><p class="note">채널 홈의 검증용 재현 화면 · 실제 YouTube 화면이 아닙니다.</p><img class="channel-banner" src="${nonVideoImage}" data-test="channel-banner" alt="예시 채널 배너"><h2>${avatar}예시 채널</h2><nav><span>홈</span><span>동영상</span></nav><h3>추천 영상</h3><ytm-channel-featured-video-renderer data-test="channel-featured"><div class="video-thumbnail-container-large" data-test="channel-featured-thumbnail"><img src="${channelImage}" alt="대표 영상 썸네일"></div><a href="/watch?v=featured" data-test="channel-featured-title">천천히 배우는 영상 편집</a><span>예시 채널 · 조회수 123회</span><div id="movie_player" data-test="channel-player"><img src="${channelImage}" data-test="channel-player-poster" alt="재생 화면 이미지"><p>▶ 채널 대표 영상 플레이어</p></div></ytm-channel-featured-video-renderer><section data-test="channel-shelf"><a href="/watch?v=relative" data-test="channel-relative-link"><div class="thumbnail-cover" data-test="channel-relative-thumbnail"><img src="${channelImage}" alt="영상 썸네일"></div><span data-test="channel-relative-title">집중해서 듣는 이야기</span></a><a href="https://m.youtube.com/watch?v=absolute" data-test="channel-mobile-link"><div class="video-thumbnail-container-compact" data-test="channel-mobile-thumbnail"></div><span data-test="channel-mobile-title">산책하며 듣는 음악</span></a></section>${forYouShelf()}</main>`;
     }
+    // Card structures as served by m.youtube.com on 2026-10-20. The length
+    // badge sits inside the thumbnail, which the script hides.
+    function timeBadge(text) {
+      return text === null ? '' : `<div class="videoThumbnailGroupOverlayBottomLeftRightGroup"><ytm-thumbnail-overlay-time-status-renderer class="ytmThumbnailOverlayTimeStatusRendererHost videoThumbnailGroupTimeStatus"><badge-shape class="ytBadgeShapeHost ytBadgeShapeThumbnailDefault"><div class="ytBadgeShapeText">${text}</div></badge-shape></ytm-thumbnail-overlay-time-status-renderer></div>`;
+    }
+    function compactVideo(name, { badge = '14:26', byline = '', stats = ['조회수 47만회', '1일 전'] } = {}) {
+      const subhead = `${byline ? `<div class="YtmCompactMediaItemByline"><span class="ytAttributedStringHost">${byline}</span></div>` : ''}${stats.map(text => `<div class="YtmCompactMediaItemStats"><span class="ytAttributedStringHost" aria-label="${text}" role="text">${text}</span></div>`).join('')}`;
+      return `<ytm-compact-video-renderer class="YtmCompactVideoRendererHost item" data-test="${name}"><div class="YtmCompactMediaItemHost"><a href="/watch?v=${name}" class="YtmCompactMediaItemImage" aria-hidden="true"><ytm-compact-thumbnail class="video-thumbnail-container-compact video-thumbnail-container-compact-rounded" data-test="${name}-thumbnail"><img class="video-thumbnail-img" alt="" src="${channelImage}">${timeBadge(badge)}</ytm-compact-thumbnail></a><div class="YtmCompactMediaItemMetadata"><a href="/watch?v=${name}" class="YtmCompactMediaItemMetadataContent"><h4 class="YtmCompactMediaItemHeadline" data-test="${name}-headline"><span class="ytAttributedStringHost" role="text">목록 영상 제목</span></h4><div class="YtmCompactMediaItemSubhead" aria-hidden="true" data-test="${name}-subhead">${subhead}</div></a></div></div></ytm-compact-video-renderer>`;
+    }
+    function searchVideo(name, { badge = '54:50', bylines = ['예시 채널', '조회수 55만회', '3일 전'] } = {}) {
+      const byline = bylines.map(text => `<span class="ytmBadgeAndBylineRendererItemByline" dir="auto" aria-hidden="true"><span class="ytAttributedStringHost">${text}</span></span>`).join('<span class="ytmBadgeAndBylineRendererSeparator" aria-hidden="true">•</span>');
+      return `<ytm-video-with-context-renderer class="item" data-test="${name}"><ytm-media-item><a href="/watch?v=${name}" class="media-item-thumbnail-container" aria-hidden="true"><ytm-thumbnail-cover class="video-thumbnail-container-large rounded-thumbnail" data-test="${name}-thumbnail"><img class="video-thumbnail-img" alt="" src="${channelImage}">${timeBadge(badge)}</ytm-thumbnail-cover></a><div class="media-item-details"><div class="media-item-info"><div class="media-item-metadata"><a href="/watch?v=${name}"><h3 class="media-item-headline" data-test="${name}-headline"><span class="ytAttributedStringHost" role="text">검색 영상 제목</span></h3><div><ytm-badge-and-byline-renderer class="ytmBadgeAndBylineRendererHost" data-test="${name}-byline">${byline}</ytm-badge-and-byline-renderer></div></a></div></div></div></ytm-media-item></ytm-video-with-context-renderer>`;
+    }
+    function playlistVideo(name, { badge = '14:37' } = {}) {
+      const badgeHtml = badge === null ? '' : `<yt-thumbnail-bottom-overlay-view-model class="ytThumbnailBottomOverlayViewModelHost"><div class="ytThumbnailBottomOverlayViewModelBadgeContainer"><yt-thumbnail-badge-view-model class="ytThumbnailBadgeViewModelHost"><badge-shape class="ytBadgeShapeHost" role="img" aria-label="길이"><div class="ytBadgeShapeText" aria-hidden="true">${badge}</div></badge-shape></yt-thumbnail-badge-view-model></div></yt-thumbnail-bottom-overlay-view-model>`;
+      return `<yt-lockup-view-model class="ytLockupViewModelWrapper" data-test="${name}"><div class="ytLockupViewModelHost ytLockupViewModelHorizontal"><a href="/watch?v=${name}&amp;list=PLexample" class="ytLockupViewModelContentImage" aria-hidden="true"><yt-thumbnail-view-model class="ytThumbnailViewModelHost" data-test="${name}-thumbnail"><div class="ytThumbnailViewModelImage"><img alt="" src="${channelImage}"></div>${badgeHtml}</yt-thumbnail-view-model></a><div class="ytLockupViewModelMetadata"><yt-lockup-metadata-view-model><div class="ytLockupMetadataViewModelTextContainer"><h3 class="ytLockupMetadataViewModelHeadingReset"><a href="/watch?v=${name}&amp;list=PLexample" class="ytLockupMetadataViewModelTitle" data-test="${name}-headline"><span class="ytAttributedStringHost">재생목록 영상 제목</span></a></h3><div class="ytLockupMetadataViewModelMetadata"><yt-content-metadata-view-model class="ytContentMetadataViewModelHost"><div class="ytContentMetadataViewModelMetadataRow" role="group" data-test="${name}-channel"><span class="ytAttributedStringHost ytContentMetadataViewModelMetadataText ytContentMetadataViewModelMetadataTextLastPart" dir="auto" role="text">준우</span></div><div class="ytContentMetadataViewModelMetadataRow" role="group" data-test="${name}-row"><span class="ytAttributedStringHost ytContentMetadataViewModelMetadataText" dir="auto" role="text">조회수 212만회</span><span aria-hidden="true" class="ytContentMetadataViewModelDelimiter"> • </span><span class="ytAttributedStringHost ytContentMetadataViewModelMetadataText ytContentMetadataViewModelMetadataTextLastPart" dir="auto" aria-label="4년 전" role="text">4년 전</span></div></yt-content-metadata-view-model></div></div></yt-lockup-metadata-view-model></div></div></yt-lockup-view-model>`;
+    }
+    const featuredLabel = '카이스트 다닌단 남친 구라같아서 대학 단톡팠더니.. 게시자: 준우 조회수 1,411,788회 5개월 전 12분 18초';
+    const liveLabel = '24/7 halloween ambience 🎃 spooky lofi to get chills to 게시자: Lofi Girl 4.8천명 시청 중';
+    // Channel home: page header with the subscribe button, the featured video
+    // section, then the "동영상" shelf, nested as on m.youtube.com.
+    function channelHome(label, { subscribe = '구독' } = {}) {
+      return `${header}<main class="yt-mimic"><yt-page-header-view-model><div class="ytFlexibleActionsViewModelActionRow"><button-view-model><button class="ytSpecButtonShapeNextHost" aria-label="${subscribe}" data-test="subscribe-button">${subscribe}</button></button-view-model></div></yt-page-header-view-model><ytm-item-section-renderer><lazy-list><ytm-channel-featured-video-renderer class="YtmChannelFeaturedVideoRendererHost item" data-test="ch-featured"><a href="/watch?v=featured"><ytm-thumbnail-cover class="video-thumbnail-container-large rounded-thumbnail" data-test="ch-featured-thumbnail"><img class="video-thumbnail-img" alt="" src="${channelImage}"></ytm-thumbnail-cover><h3 class="YtmChannelFeaturedVideoRendererTitle" data-test="ch-featured-heading"><span class="ytAttributedStringHost" aria-label="${label}" role="text">카이스트 다닌단 남친 구라같아서 대학 단톡팠더니..</span></h3></a></ytm-channel-featured-video-renderer></lazy-list></ytm-item-section-renderer><ytm-shelf-renderer class="vertical-shelf-separators"><div class="shelf-header" data-test="ch-shelf-header"><a href="/@example/videos" class="shelf-header-endpoint"><div class="shelf-title-bar"><h3 class="shelf-title" data-test="ch-shelf-heading"><span class="ytAttributedStringHost">동영상</span></h3></div></a></div><ytm-vertical-list-renderer>${compactVideo('ch-list')}</ytm-vertical-list-renderer></ytm-shelf-renderer></main>`;
+    }
+    const added = (root, kind = 'duration') => Array.from(root.querySelectorAll(`[data-dopazero-added="${kind}"]`));
+    // Text as drawn, including YouTube's CSS separators (::before).
+    function renderedText(element, selector = '*') {
+      return Array.from(element.children).filter(child => child.matches(selector)).map(child => {
+        const before = getComputedStyle(child, '::before').content;
+        return (/^["']/.test(before) ? before.slice(1, -1) : '') + child.textContent;
+      }).join('');
+    }
+    const bylineText = name => Array.from(get(`${name}-byline`).children).map(child => child.textContent.trim()).join(' ');
     async function mount(url, html) {
       history.pushState({}, '', url);
       fixture.innerHTML = html;
@@ -381,6 +437,163 @@
         assert(style, '스타일 태그가 있어야 합니다'); style.remove(); await delay();
         assert(document.getElementById('dopazero-youtube-style'), '스타일이 다시 추가되어야 합니다');
         hidden('search-thumbnail'); hidden('short-result'); shown('search-title');
+      }],
+      ['채널 홈 목록: 숨긴 썸네일의 재생시간을 조회수 앞에 같은 구분 기호로 표시', async () => {
+        await mount('/@example', `${header}<main>${compactVideo('list-video')}${compactVideo('list-live', { badge: '라이브', byline: 'Lofi Girl', stats: ['2.1만명 시청 중'] })}${compactVideo('list-plain', { badge: null })}<ytm-expandable-video-description-body-renderer>${compactVideo('list-described')}</ytm-expandable-video-description-body-renderer></main>`);
+        hidden('list-video-thumbnail');
+        const text = renderedText(get('list-video-subhead'));
+        assert(text === '14:26 · 조회수 47만회 · 1일 전', `정보 줄이 "14:26 · 조회수 47만회 · 1일 전"이어야 합니다 (현재 "${text}")`);
+        assert(added(get('list-video'))[0]?.matches('.YtmCompactMediaItemStats'), '목록의 Stats 항목을 복제해야 YouTube 구분 기호가 붙습니다');
+        // Live cards keep the channel line first; the badge text is used as is.
+        const live = get('list-live-subhead');
+        assert(live.firstElementChild.matches('.YtmCompactMediaItemByline'), '라이브 카드의 채널명 줄은 맨 위에 그대로 있어야 합니다');
+        const liveText = renderedText(live, '.YtmCompactMediaItemStats');
+        assert(liveText === '라이브 · 2.1만명 시청 중', `라이브는 배지 문구 그대로 붙여야 합니다 (현재 "${liveText}")`);
+        assert(!added(get('list-plain')).length && renderedText(get('list-plain-subhead')) === '조회수 47만회 · 1일 전', '배지가 없으면 아무것도 붙이지 않아야 합니다');
+        // Thumbnails stay in descriptions, so their badge stays too.
+        shown('list-described-thumbnail');
+        assert(!added(get('list-described')).length, '썸네일을 숨기지 않는 영역에는 재생시간을 붙이지 않아야 합니다');
+      }],
+      ['검색 결과: 재생시간을 채널명 앞에 •로 표시, 라이브·배지 없음·채널 카드 구분', async () => {
+        await mount('/results?search_query=lofi', `${header}<main><ytm-item-section-renderer><ytm-compact-channel-renderer data-test="duration-channel-card"><a href="/@example"><ytm-compact-thumbnail class="video-thumbnail-container-compact"><img src="${nonVideoImage}" alt="채널 프로필" data-test="duration-channel-avatar"></ytm-compact-thumbnail></a><a href="/@example">예시 채널 · 구독자 1.2만명</a></ytm-compact-channel-renderer>${searchVideo('search-time')}${searchVideo('search-live', { badge: '실시간', bylines: ['Lofi Girl', '1.2천명 시청 중'] })}${searchVideo('search-plain', { badge: null })}</ytm-item-section-renderer></main>`);
+        hidden('search-time-thumbnail');
+        const text = bylineText('search-time');
+        assert(text === '54:50 • 예시 채널 • 조회수 55만회 • 3일 전', `검색 정보 줄이 "54:50 • 예시 채널 • 조회수 55만회 • 3일 전"이어야 합니다 (현재 "${text}")`);
+        assert(added(get('search-time')).length === 2, '바깥 카드와 ytm-media-item이 겹쳐도 길이와 구분자는 한 번만 들어가야 합니다');
+        assert(bylineText('search-live') === '실시간 • Lofi Girl • 1.2천명 시청 중', '라이브 배지 문구를 그대로 붙여야 합니다');
+        assert(bylineText('search-plain') === '예시 채널 • 조회수 55만회 • 3일 전', '배지가 없으면 아무것도 붙이지 않아야 합니다');
+        shown('duration-channel-avatar');
+        assert(!added(get('duration-channel-card')).length, '채널 카드에는 아무것도 붙이지 않아야 합니다');
+      }],
+      ['재생목록: 재생시간을 조회수 줄 맨 앞에 구분자와 함께 표시', async () => {
+        await mount('/playlist?list=PLexample', `${header}<main>${playlistVideo('list-entry')}${playlistVideo('list-entry-plain', { badge: null })}</main>`);
+        hidden('list-entry-thumbnail');
+        const text = get('list-entry-row').textContent;
+        assert(text === '14:37 • 조회수 212만회 • 4년 전', `재생목록 정보 줄이 "14:37 • 조회수 212만회 • 4년 전"이어야 합니다 (현재 "${text}")`);
+        assert(get('list-entry-channel').textContent === '준우', '채널명 줄은 바꾸지 않아야 합니다');
+        assert(get('list-entry-plain-row').textContent === '조회수 212만회 • 4년 전', '배지가 없으면 아무것도 붙이지 않아야 합니다');
+      }],
+      ['재활용 카드: 배지 글자·정보 줄이 바뀌거나 배지가 사라져도 재생시간은 하나만 맞춤', async () => {
+        await mount('/@example', `${header}<main>${compactVideo('reused', { badge: '0:00' })}</main>`);
+        const text = () => renderedText(get('reused-subhead'));
+        assert(text() === '0:00 · 조회수 47만회 · 1일 전', `처음 배지 글자를 붙여야 합니다 (현재 "${text()}")`);
+        // YouTube fills in a badge by changing its text node in place.
+        get('reused').querySelector('.ytBadgeShapeText').firstChild.data = '3:21';
+        await delay();
+        assert(text() === '3:21 · 조회수 47만회 · 1일 전', `배지 글자가 바뀌면 따라 바뀌어야 합니다 (현재 "${text()}")`);
+        // A recycled card replaces its info line items.
+        get('reused-subhead').innerHTML = '<div class="YtmCompactMediaItemStats"><span>조회수 1.2천회</span></div><div class="YtmCompactMediaItemStats"><span>2일 전</span></div>';
+        await delay();
+        assert(text() === '3:21 · 조회수 1.2천회 · 2일 전', `정보 줄이 새로 그려져도 다시 붙여야 합니다 (현재 "${text()}")`);
+        get('reused').querySelector('ytm-thumbnail-overlay-time-status-renderer').remove();
+        await delay();
+        assert(text() === '조회수 1.2천회 · 2일 전' && !added(get('reused')).length, '배지가 사라지면 재생시간도 빼야 합니다');
+        get('reused-thumbnail').insertAdjacentHTML('beforeend', timeBadge('1:02:03'));
+        await delay();
+        assert(text() === '1:02:03 · 조회수 1.2천회 · 2일 전', `배지가 다시 생기면 다시 붙여야 합니다 (현재 "${text()}")`);
+        assert(added(get('reused')).length === 1, '카드마다 재생시간은 하나만 있어야 합니다');
+      }],
+      ['스크립트가 넣은 요소 때문에 DOM을 반복해서 고치지 않음', async () => {
+        await mount('/@example', `${channelHome(featuredLabel)}${searchVideo('loop-search')}${playlistVideo('loop-playlist')}`);
+        let changes = 0;
+        const counter = new MutationObserver(records => { changes += records.length; });
+        counter.observe(fixture, { subtree: true, childList: true, characterData: true, attributes: true });
+        // One unrelated change runs a normal refresh; nothing else may follow.
+        fixture.insertAdjacentHTML('beforeend', '<p>다른 변경</p>');
+        await delay(400);
+        counter.disconnect();
+        assert(changes === 1, `이미 맞춘 화면을 다시 고치면 안 됩니다 (변경 ${changes}건)`);
+        assert(added(get('ch-list')).length === 1 && added(get('loop-search')).length === 2 && added(get('loop-playlist')).length === 2, '카드마다 재생시간이 한 번씩 있어야 합니다');
+        assert(added(fixture, 'featured-header').length === 1 && added(fixture, 'featured-info').length === 1, '대표 영상 머리글과 정보 줄은 하나씩이어야 합니다');
+      }],
+      ['채널 홈 대표 영상: 구독 상태·라이브에 맞는 머리글 하나와 정보 줄', async () => {
+        await mount('/@example', channelHome(featuredLabel));
+        const headings = () => added(get('ch-featured'), 'featured-header');
+        const infos = () => added(get('ch-featured'), 'featured-info');
+        assert(headings().length === 1 && headings()[0].textContent === '채널 트레일러', `구독 전에는 "채널 트레일러" 머리글이어야 합니다 (현재 "${headings()[0]?.textContent}")`);
+        assert(!headings()[0].closest('a'), '머리글은 링크가 아니어야 합니다');
+        assert(get('ch-featured').firstElementChild === headings()[0], '머리글은 대표 영상 맨 위에 있어야 합니다');
+        assert(infos().length === 1 && infos()[0].textContent === '12:18 · 조회수 141만회 · 5개월 전', `정보 줄이 "12:18 · 조회수 141만회 · 5개월 전"이어야 합니다 (현재 "${infos()[0]?.textContent}")`);
+        assert(infos()[0].closest('a[href^="/watch"]') && infos()[0].previousElementSibling === get('ch-featured-heading'), '정보 줄은 링크 안, 제목 바로 아래에 있어야 합니다');
+        get('subscribe-button').textContent = '구독중';
+        await delay();
+        assert(headings().length === 1 && headings()[0].textContent === '추천 동영상', '구독 중이면 "추천 동영상" 머리글이어야 합니다');
+        get('subscribe-button').textContent = '구독';
+        await delay();
+        assert(headings().length === 1 && headings()[0].textContent === '채널 트레일러', '구독을 취소하면 다시 "채널 트레일러"여야 합니다');
+        get('ch-featured-heading').firstElementChild.setAttribute('aria-label', liveLabel);
+        await delay();
+        assert(headings().length === 1 && headings()[0].textContent === '라이브', '라이브 영상이면 "라이브" 머리글이어야 합니다');
+        assert(infos().length === 1 && infos()[0].textContent === '4.8천명 시청 중', '라이브는 시청자 수를 정보 줄로 보여야 합니다');
+        // YouTube can redraw the renderer; the header must come back exactly once.
+        const fresh = get('ch-featured').cloneNode(true);
+        fresh.querySelectorAll('[data-dopazero-added]').forEach(node => node.remove());
+        get('ch-featured').innerHTML = fresh.innerHTML;
+        await delay();
+        assert(headings().length === 1 && infos().length === 1, '다시 그려진 대표 영상에도 머리글과 정보 줄은 하나씩이어야 합니다');
+        get('ch-featured').append(headings()[0].cloneNode(true));
+        fixture.insertAdjacentHTML('beforeend', '<p>다른 변경</p>');
+        await delay();
+        assert(headings().length === 1 && get('ch-featured').firstElementChild === headings()[0], '머리글이 둘이 되어도 다음 확인 때 하나만 남겨야 합니다');
+      }],
+      ['대표 영상 정보 줄: 조회수 내림 표기·시간 포함 길이·형식이 다르면 제목만', async () => {
+        await mount('/@example', channelHome(featuredLabel));
+        const span = get('ch-featured-heading').firstElementChild;
+        const infoFor = async label => {
+          span.setAttribute('aria-label', label);
+          await delay();
+          return added(get('ch-featured'), 'featured-info').map(node => node.textContent);
+        };
+        const prefix = '영상 제목 게시자: 예시 채널 조회수 ';
+        const cases = [
+          ['42,293회 3일 전 1시간 2분 3초', '1:02:03 · 조회수 4.2만회 · 3일 전'],
+          ['999회 2시간 전 45초', '0:45 · 조회수 999회 · 2시간 전'],
+          ['1,500회 1주 전 5분', '5:00 · 조회수 1.5천회 · 1주 전'],
+          ['10,000회 1년 전 2시간', '2:00:00 · 조회수 1만회 · 1년 전'],
+          ['478,951회 1일 전 14분 26초', '14:26 · 조회수 47만회 · 1일 전'],
+          ['123,456,789회 6년 전 3분 7초', '3:07 · 조회수 1.2억회 · 6년 전'],
+          ['1,234,567,890회 6년 전 3분 7초', '3:07 · 조회수 12억회 · 6년 전'],
+        ];
+        for (const [rest, expected] of cases) {
+          const info = await infoFor(prefix + rest);
+          assert(info.length === 1 && info[0] === expected, `"${rest}" → "${expected}"여야 합니다 (현재 "${info.join(', ')}")`);
+        }
+        assert(!(await infoFor('Video title by Example 1,234 views 5 months ago 12 minutes')).length, '형식이 다르면 정보 줄을 넣지 않아야 합니다');
+        assert(!(await infoFor(`${prefix}1,234회 최초 공개 예정`)).length, '날짜 형식이 다르면 정보 줄을 넣지 않아야 합니다');
+        shown('ch-featured-heading');
+        document.documentElement.lang = 'en';
+        try {
+          assert(!(await infoFor(featuredLabel)).length && !added(get('ch-featured'), 'featured-header').length, '한국어 화면이 아니면 머리글과 정보 줄을 넣지 않아야 합니다');
+        } finally {
+          document.documentElement.lang = 'ko';
+        }
+      }],
+      ['대표 영상 머리글은 "동영상"과 같은 글꼴·간격, 제목·정보 줄은 목록 제목과 같은 선', async () => {
+        await mount('/@example', channelHome(featuredLabel));
+        hidden('ch-featured-thumbnail'); hidden('ch-list-thumbnail');
+        const heading = added(get('ch-featured'), 'featured-header')[0];
+        assert(heading, '대표 영상 머리글이 필요합니다');
+        const ours = getComputedStyle(heading);
+        const shelf = getComputedStyle(get('ch-shelf-heading'));
+        for (const property of ['font-family', 'font-size', 'line-height', 'font-weight', 'color']) {
+          assert(ours[property] === shelf[property], `머리글 ${property}가 "동영상"과 같아야 합니다 (${ours[property]} / ${shelf[property]})`);
+        }
+        assert(ours.fontSize === '18px' && ours.lineHeight === '26px' && ours.fontWeight === '700', '머리글은 18px/26px 굵게(700)여야 합니다');
+        const box = element => element.getBoundingClientRect();
+        assert(box(heading).left === box(get('ch-shelf-heading')).left, '두 머리글은 같은 왼쪽 선에 있어야 합니다');
+        assert(box(heading).height === box(get('ch-shelf-header')).height, '머리글 높이(아래 3px 포함)가 "동영상"과 같아야 합니다');
+        const ourGap = box(get('ch-featured-heading')).top - box(heading).bottom;
+        const shelfGap = box(get('ch-list-headline')).top - box(get('ch-shelf-header')).bottom;
+        assert(ourGap === shelfGap && ourGap === 12, `머리글 아래부터 제목까지 12px이어야 합니다 (${ourGap} / ${shelfGap})`);
+        const listLeft = box(get('ch-list-headline')).left;
+        assert(box(get('ch-featured-heading')).left === listLeft, `대표 영상 제목이 목록 제목과 같은 선에서 시작해야 합니다 (${box(get('ch-featured-heading')).left} / ${listLeft})`);
+        const info = added(get('ch-featured'), 'featured-info')[0];
+        assert(info && box(info).left === listLeft, '대표 영상 정보 줄도 목록 제목과 같은 선이어야 합니다');
+        const infoStyle = getComputedStyle(info);
+        const listStyle = getComputedStyle(get('ch-list-subhead'));
+        for (const property of ['font-size', 'line-height', 'opacity', 'color']) {
+          assert(infoStyle[property] === listStyle[property], `정보 줄 ${property}가 목록 정보 줄과 같아야 합니다 (${infoStyle[property]} / ${listStyle[property]})`);
+        }
       }],
     ];
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DopaZero - YouTube 집중 모드
 // @namespace    dopazero.local
-// @version      1.0.3
+// @version      1.0.4
 // @description  홈 추천 피드, 영상 썸네일, 시청 페이지 추천 영상과 Shorts 진입점을 숨깁니다.
 // @match        https://m.youtube.com/*
 // @match        https://www.youtube.com/*
@@ -22,6 +22,8 @@
   const SHORTS_ATTR = 'data-dopazero-shorts';
   const HOME_ATTR = 'data-dopazero-home-root';
   const HOME_BRANCH_ATTR = 'data-dopazero-home-branch';
+  // Marks every element this script inserts into YouTube's own markup.
+  const ADDED_ATTR = 'data-dopazero-added';
   if (document.getElementById(STYLE_ID)) return;
 
   // Keep these scoped to video cards: avatars, comments and the player stay intact.
@@ -98,6 +100,31 @@
     PRESERVE_CONTENT, '#c4-player',
     'ytm-backstage-post-renderer', 'ytd-backstage-post-renderer',
   ].join(',');
+  // A hidden thumbnail takes its length badge with it. Each card type gets the
+  // badge text at the front of its own info line, cloned from that line's item
+  // (and separator) so YouTube's styles and " · " / "•" separators still apply.
+  const DURATION_TYPES = [
+    { // Channel home lists: YouTube draws " · " before every later Stats item.
+      card: 'ytm-compact-video-renderer',
+      badge: 'ytm-thumbnail-overlay-time-status-renderer .ytBadgeShapeText',
+      row: '.YtmCompactMediaItemSubhead', item: '.YtmCompactMediaItemStats',
+    },
+    { // Search results
+      card: 'ytm-media-item',
+      badge: 'ytm-thumbnail-overlay-time-status-renderer .ytBadgeShapeText',
+      row: 'ytm-badge-and-byline-renderer', item: '.ytmBadgeAndBylineRendererItemByline',
+      separator: '.ytmBadgeAndBylineRendererSeparator',
+    },
+    { // Playlists: the views row, the one with a delimiter.
+      card: 'yt-lockup-view-model',
+      badge: 'yt-thumbnail-badge-view-model .ytBadgeShapeText',
+      row: '.ytContentMetadataViewModelMetadataRow', item: '.ytContentMetadataViewModelMetadataText',
+      separator: '.ytContentMetadataViewModelDelimiter',
+    },
+  ];
+  const DURATION_CARDS = DURATION_TYPES.map(type => type.card).join(',');
+  const DURATION_BADGES = 'ytm-thumbnail-overlay-time-status-renderer, yt-thumbnail-badge-view-model';
+  const FEATURED = 'ytm-channel-featured-video-renderer';
 
   // Keep the stylesheet small: the same card/thumbnail combinations need
   // only two selector lists, not hundreds of expanded descendant rules.
@@ -130,6 +157,21 @@
     html[${PAGE_ATTR}="watch"] ytd-watch-next-secondary-results-renderer,
     html[${PAGE_ATTR}="watch"] ytd-watch-flexy #related {
       display: none !important;
+    }
+
+    /* Channel home featured video: a header like the "동영상" shelf title
+       (YouTube styles that one only inside ytm-shelf-renderer), and title and
+       info line moved onto the list titles' line, 8px past the side padding. */
+    ${FEATURED} > h3[${ADDED_ATTR}="featured-header"] {
+      display: block; margin: 0; padding: 0 0 3px;
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      color: inherit; font-family: inherit;
+      font-size: 18px; font-weight: 700; line-height: 26px;
+    }
+    ${FEATURED} > a[href] { margin-left: 8px !important; }
+    ${FEATURED} div[${ADDED_ATTR}="featured-info"] {
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      font-size: 12px; font-weight: 400; line-height: 15px; opacity: .6;
     }
 
     html:not([${PAGE_ATTR}="home"]) #${PANEL_ID} { display: none !important; }
@@ -207,6 +249,7 @@
   const hiddenShorts = new Set();
   let homePath = [];
   let homePanel = null;
+  const featuredVideos = document.getElementsByTagName(FEATURED);
 
   function currentPath() {
     return location.pathname.replace(/\/+$/, '') || '/';
@@ -252,6 +295,122 @@
       if (isShortsLink(anchor)) hideShortsElement(anchor);
     });
     root.querySelectorAll(SHORTS_MARKERS).forEach(hideShortsElement);
+  }
+
+  function addedElement(tag, kind, text) {
+    const element = document.createElement(tag);
+    element.setAttribute(ADDED_ATTR, kind);
+    element.textContent = text;
+    return element;
+  }
+
+  function syncDuration(card) {
+    const type = DURATION_TYPES.find(candidate => card.matches(candidate.card));
+    const previous = Array.from(card.querySelectorAll(`[${ADDED_ATTR}="duration"]`));
+    // Thumbnails stay visible in descriptions, comments and the player.
+    const text = card.closest(PRESERVE_THUMBNAILS) ? ''
+      : card.querySelector(type.badge)?.textContent.trim() || '';
+    let anchor = null;
+    let separator = null;
+    if (text) {
+      for (const row of card.querySelectorAll(type.row)) {
+        anchor = row.querySelector(`:scope > ${type.item}:not([${ADDED_ATTR}])`);
+        separator = type.separator
+          && row.querySelector(`:scope > ${type.separator}:not([${ADDED_ATTR}])`);
+        if (anchor && (!type.separator || separator)) break;
+        anchor = null;
+      }
+    }
+    // Recycled cards change badge text or redraw the line: keep exactly one
+    // copy with the current text, right before the line's first own item.
+    const count = anchor ? (separator ? 2 : 1) : 0;
+    if (previous.length === count && (!count || (previous[0].textContent === text
+      && previous[count - 1].nextElementSibling === anchor
+      && previous[0].nextElementSibling === (count === 2 ? previous[1] : anchor)))) return;
+    previous.forEach(element => element.remove());
+    if (!anchor) return;
+    const item = anchor.cloneNode(false);
+    item.removeAttribute('aria-label');
+    item.classList.remove('ytContentMetadataViewModelMetadataTextLastPart');
+    item.setAttribute(ADDED_ATTR, 'duration');
+    item.textContent = text;
+    const copies = [item];
+    if (separator) {
+      const copy = separator.cloneNode(true);
+      copy.setAttribute(ADDED_ATTR, 'duration');
+      copies.push(copy);
+    }
+    anchor.before(...copies);
+  }
+
+  function syncDurations(roots) {
+    const cards = new Set();
+    for (const root of roots) {
+      if (!root.isConnected) continue;
+      const card = root.closest?.(DURATION_CARDS);
+      if (card) cards.add(card);
+      root.querySelectorAll(DURATION_CARDS).forEach(found => cards.add(found));
+    }
+    cards.forEach(syncDuration);
+  }
+
+  // YouTube rounds view counts down: 1.5천, 4.2만, 141만, 1.2억, 12억.
+  function shortCount(count) {
+    for (const [size, unit] of [[1e8, '억'], [1e4, '만'], [1e3, '천']]) {
+      if (count < size) continue;
+      const tenths = Math.floor(count * 10 / size);
+      return `${tenths < 100 ? tenths / 10 : Math.floor(tenths / 10)}${unit}`;
+    }
+    return String(count);
+  }
+
+  // The featured title's aria-label carries what its thumbnail showed:
+  // "<제목> 게시자: <채널> 조회수 1,411,788회 5개월 전 12분 18초", or
+  // "<제목> 게시자: <채널> 4.8천명 시청 중" while the channel is live.
+  function featuredDetails(label) {
+    const watching = / (\d[\d,.]*[천만억]?명 시청 중)$/.exec(label);
+    if (watching) return { live: true, info: watching[1] };
+    const start = label.lastIndexOf(' 조회수 ');
+    const match = start < 0 ? null
+      : /^([\d,]+)회 (.*전)(?: (?=\d)(?:(\d+)시간 ?)?(?:(\d+)분 ?)?(?:(\d+)초)?)?$/.exec(label.slice(start + 5));
+    if (!match) return { live: false, info: '' };
+    const [, views, date, hours, minutes, seconds] = match;
+    const pad = value => String(value || 0).padStart(2, '0');
+    const length = hours ? `${hours}:${pad(minutes)}:${pad(seconds)}`
+      : minutes || seconds ? `${minutes || 0}:${pad(seconds)}` : '';
+    const count = `조회수 ${shortCount(Number(views.replace(/,/g, '')))}회`;
+    return { live: false, info: [length, count, date].filter(Boolean).join(' · ') };
+  }
+
+  // Subscribers see the channel's pick for returning subscribers, everyone
+  // else (signed out included) the channel trailer.
+  function isSubscribed(featured) {
+    const page = featured.closest('ytm-browse') || document;
+    return Array.from(page.querySelectorAll('yt-page-header-view-model button, ytm-c4-tabbed-header-renderer button'))
+      .some(button => /^구독\s*중/.test(button.textContent.trim()));
+  }
+
+  function syncFeatured(featured) {
+    const title = featured.querySelector(`h3:not([${ADDED_ATTR}])`);
+    // The labels and the aria-label format are Korean.
+    const details = title && /^ko\b/i.test(document.documentElement.lang)
+      ? featuredDetails(title.querySelector('[aria-label]')?.getAttribute('aria-label') || '')
+      : null;
+    const heading = !details ? '' : details.live ? '라이브'
+      : isSubscribed(featured) ? '추천 동영상' : '채널 트레일러';
+    const headers = featured.querySelectorAll(`[${ADDED_ATTR}="featured-header"]`);
+    if (!(heading && headers.length === 1 && headers[0] === featured.firstElementChild
+      && headers[0].textContent === heading)) {
+      headers.forEach(element => element.remove());
+      if (heading) featured.prepend(addedElement('h3', 'featured-header', heading));
+    }
+    const info = details?.info || '';
+    const infos = featured.querySelectorAll(`[${ADDED_ATTR}="featured-info"]`);
+    if (!(info && infos.length === 1 && infos[0] === title.nextElementSibling
+      && infos[0].textContent === info)) {
+      infos.forEach(element => element.remove());
+      if (info) title.after(addedElement('div', 'featured-info', info));
+    }
   }
 
   function addHomeSearch() {
@@ -370,11 +529,11 @@
         hiddenShorts.delete(element);
       }
     }
-    if (fullScanNeeded) {
-      scanShorts(document);
-    } else {
-      for (const root of pendingRoots) scanShorts(root);
-    }
+    const roots = fullScanNeeded ? [document] : pendingRoots;
+    for (const root of roots) scanShorts(root);
+    syncDurations(roots);
+    // At most one per channel home; its header also follows the subscribe button.
+    for (const featured of featuredVideos) syncFeatured(featured);
     pendingRoots.clear();
     fullScanNeeded = false;
   }
@@ -388,8 +547,17 @@
     syncVisiblePage();
     // CSS and the search panel take priority over scanning all existing links.
     schedule(true);
+    const isAdded = node => node.nodeType === Node.ELEMENT_NODE && node.hasAttribute(ADDED_ATTR);
     new MutationObserver(records => {
       for (const record of records) {
+        if (record.type === 'characterData') {
+          // Badges fill in (or recycle) their length text in place; the
+          // subscribe button can relabel itself the same way.
+          const owner = record.target.parentElement
+            ?.closest(`${DURATION_BADGES}, yt-page-header-view-model button`);
+          if (owner) pendingRoots.add(owner);
+          continue;
+        }
         if (record.type === 'attributes') {
           // Ignore unrelated animation/player class changes; only navigation
           // markers need class/label observation, including marker removal.
@@ -397,15 +565,19 @@
             && !record.target.closest('ytm-pivot-bar-item-renderer')
             && !record.target.classList.contains('pivot-shorts')
             && !/(^|\s)pivot-shorts(\s|$)/.test(record.oldValue || '')) continue;
+          // The featured title's aria-label is the source of its info line.
           if (record.attributeName === 'aria-label'
-            && !record.target.closest('ytm-pivot-bar-item-renderer')) continue;
+            && !record.target.closest(`ytm-pivot-bar-item-renderer, ${FEATURED}`)) continue;
           pendingRoots.add(record.target);
         }
-        if (record.removedNodes.length && record.target.nodeType === Node.ELEMENT_NODE) {
+        // Elements this script inserted or removed itself need no new pass.
+        if (record.removedNodes.length && record.target.nodeType === Node.ELEMENT_NODE
+          && !Array.from(record.removedNodes).every(isAdded)) {
           pendingRoots.add(record.target);
         }
         for (const node of record.addedNodes) {
-          if (node.nodeType === Node.ELEMENT_NODE && node !== style && node.id !== PANEL_ID) {
+          if (node.nodeType === Node.ELEMENT_NODE && node !== style && node.id !== PANEL_ID
+            && !isAdded(node)) {
             pendingRoots.add(node);
           }
         }
@@ -415,7 +587,7 @@
         schedule();
       }
     }).observe(document.documentElement, {
-      subtree: true, childList: true, attributes: true,
+      subtree: true, childList: true, attributes: true, characterData: true,
       attributeOldValue: true,
       attributeFilter: ['href', 'data-style', 'overlay-style', 'tab-title', 'class', 'aria-label', 'tab-identifier', 'page-subtype'],
     });
