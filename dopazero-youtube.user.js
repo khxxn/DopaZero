@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DopaZero - YouTube 집중 모드
 // @namespace    dopazero.local
-// @version      1.0.4
+// @version      1.0.5
 // @description  홈 추천 피드, 영상 썸네일, 시청 페이지 추천 영상과 Shorts 진입점을 숨깁니다.
 // @match        https://m.youtube.com/*
 // @match        https://www.youtube.com/*
@@ -609,6 +609,17 @@
     window.setInterval(() => {
       if (!document.hidden && currentPath() !== previousPath) restorePage();
     }, 500);
+    // Feed cards play a muted preview where the thumbnail was by moving
+    // YouTube's one shared player into the card: ytm-video-preview for videos,
+    // the thumbnail's shim for stacked playlists. With the thumbnail hidden it
+    // would play unseen, so stop it there. play() often fires before the move,
+    // hence 'playing' too; the watch page keeps the player outside both.
+    function stopHiddenPreview(event) {
+      if (event.target.closest?.('ytm-video-preview, .video-preview-shim')) event.target.pause();
+    }
+    ['play', 'playing'].forEach(name => {
+      document.addEventListener(name, stopHiddenPreview, true);
+    });
   }
 
   if (document.documentElement) start();

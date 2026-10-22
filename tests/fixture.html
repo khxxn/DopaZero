@@ -595,6 +595,32 @@
           assert(infoStyle[property] === listStyle[property], `정보 줄 ${property}가 목록 정보 줄과 같아야 합니다 (${infoStyle[property]} / ${listStyle[property]})`);
         }
       }],
+      ['숨긴 썸네일 자리의 인라인 미리보기는 재생되자마자 멈추고, 시청 화면 재생은 그대로', async () => {
+        // m.youtube.com moves its one shared player into a card for a muted
+        // preview: the preview portal for videos, the thumbnail's shim for
+        // stacked playlist cards. play() often fires before the move.
+        await mount('/results?search_query=lofi', `${header}<main>${searchVideo('preview-card').replace('</ytm-media-item>', '</ytm-media-item><div id="video-preview-portal"><ytm-video-preview class="ytmVideoPreviewHost ytmVideoPreviewHostShow"><div class="ytmVideoPreviewPlayer" data-test="preview-slot"></div></ytm-video-preview></div>')}<ytm-video-with-context-renderer><ytm-media-item><a href="/playlist?list=PLexample" class="media-item-thumbnail-container"><yt-collections-stack><ytm-thumbnail-cover class="video-thumbnail-container-large" data-test="stack-thumbnail"><img src="${channelImage}" alt=""><div class="video-preview-shim" data-test="shim-slot"></div></ytm-thumbnail-cover></yt-collections-stack></a><span data-test="stack-headline">재생목록 제목</span></ytm-media-item></ytm-video-with-context-renderer><div id="player-container-id" data-test="watch-slot"></div></main>`);
+        get('watch-slot').innerHTML = '<div id="movie_player" class="html5-video-player" data-test="shared-player"><div class="html5-video-container"><video class="video-stream" muted playsinline data-test="shared-video"></video></div></div>';
+        const video = get('shared-video');
+        let pauses = 0;
+        // Count the script's pause() calls; synthetic events stand in for playback.
+        video.pause = function () { pauses += 1; return HTMLMediaElement.prototype.pause.call(this); };
+        const play = async (slot, ...types) => {
+          get(slot).append(get('shared-player'));
+          types.forEach(type => video.dispatchEvent(new Event(type)));
+          await Promise.resolve();
+        };
+        await play('preview-slot', 'play');
+        assert(pauses === 1, `미리보기 자리에서 재생이 시작되면 바로 멈춰야 합니다 (pause ${pauses}회)`);
+        await play('watch-slot', 'play');
+        await play('preview-slot', 'playing');
+        assert(pauses === 2, `시청 자리에서 play() 뒤 미리보기로 옮겨 재생돼도 멈춰야 합니다 (pause ${pauses}회)`);
+        await play('shim-slot', 'playing');
+        assert(pauses === 3, `재생목록 썸네일 안에서 재생돼도 멈춰야 합니다 (pause ${pauses}회)`);
+        await play('watch-slot', 'play', 'playing');
+        assert(pauses === 3, '시청 화면으로 옮긴 플레이어는 멈추면 안 됩니다');
+        hidden('stack-thumbnail'); shown('preview-card-headline'); shown('stack-headline');
+      }],
     ];
 
     async function run() {
