@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DopaZero - YouTube 집중 모드
 // @namespace    dopazero.local
-// @version      1.0.5
+// @version      1.0.6
 // @description  홈 추천 피드, 영상 썸네일, 시청 페이지 추천 영상과 Shorts 진입점을 숨깁니다.
 // @match        https://m.youtube.com/*
 // @match        https://www.youtube.com/*
@@ -53,12 +53,14 @@
     'img[src*="/an_webp/"]', 'img[data-thumb*="/vi/"]',
   ];
   const THUMBNAILS = [...THUMBNAIL_BOXES, ...VIDEO_IMAGES];
+  const SHORTS_LOCKUPS = [
+    'ytm-shorts-lockup-view-model', 'ytm-shorts-lockup-view-model-v2',
+    'yt-shorts-lockup-view-model', 'yt-shorts-lockup-view-model-v2',
+  ];
   const SHORTS_SURFACES = [
     'ytm-reel-shelf-renderer', 'ytm-reel-item-renderer',
-    'ytm-shorts-shelf-renderer', 'ytm-shorts-lockup-view-model',
-    'ytm-shorts-lockup-view-model-v2', 'ytm-shorts-video-cell-view-model',
-    'ytd-reel-shelf-renderer', 'ytd-reel-item-renderer',
-    'yt-shorts-lockup-view-model', 'yt-shorts-lockup-view-model-v2',
+    'ytm-shorts-shelf-renderer', 'ytm-shorts-video-cell-view-model',
+    'ytd-reel-shelf-renderer', 'ytd-reel-item-renderer', ...SHORTS_LOCKUPS,
     'yt-tab-shape[tab-title="Shorts"]', 'yt-tab-shape[tab-title="쇼츠"]',
     'ytm-tab-shape[tab-title="Shorts"]', 'ytm-tab-shape[tab-title="쇼츠"]',
     'ytm-pivot-bar-item-renderer[aria-label="Shorts"]',
@@ -135,6 +137,13 @@
   // it holds one; a channel avatar in the same box type stays visible.
   const videoImageRules = `:is(${VIDEO_IMAGES.join(',')})${notPreserved}`;
   const videoBoxRules = `:is(${THUMBNAIL_BOXES.join(',')}):has(${VIDEO_IMAGES.join(',')})${notPreserved}`;
+  // Frames that stay behind as blank space: a playlist card's thumbnail link
+  // (its title would start halfway across), and a search grid that held only
+  // Shorts. A grid that also holds regular videos stays.
+  const emptyFrameRules = [
+    `yt-lockup-view-model .ytLockupViewModelContentImage:has(yt-thumbnail-view-model)${notPreserved}`,
+    `grid-shelf-view-model:has(${SHORTS_LOCKUPS.join(',')}):not(:has(${VIDEO_CARDS.join(',')}))`,
+  ];
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
@@ -143,7 +152,8 @@
     ${videoImageRules},
     ${SHORTS_SURFACES.join(',\n')} { display: none !important; }
     /* A separate rule: a browser without :has() drops only this one. */
-    ${videoBoxRules} { display: none !important; }
+    ${videoBoxRules},
+    ${emptyFrameRules.join(',\n')} { display: none !important; }
 
     html[${PAGE_ATTR}="home"] .tab-content[tab-identifier="FEwhat_to_watch"] > :not(#${PANEL_ID}),
     html[${PAGE_ATTR}="home"] ytd-browse[page-subtype="home"] > :not(#${PANEL_ID}),

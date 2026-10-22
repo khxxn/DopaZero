@@ -67,6 +67,14 @@
     #fixture-root .yt-mimic .YtmCompactMediaItemMetadataContent { display: block; flex-grow: 1; min-width: 0; padding: 0 8px; }
     #fixture-root .yt-mimic .YtmCompactMediaItemHeadline { margin: 0; font-size: 14px; font-weight: 400; line-height: 1.25; }
     #fixture-root .yt-mimic .YtmCompactMediaItemSubhead { font-size: 12px; line-height: 1.25; opacity: .6; }
+    /* Playlist card and search Shorts grid boxes as measured on m.youtube.com
+       (2026-10-22): the thumbnail link keeps 172x80 and the grid its margins. */
+    #fixture-root .yt-mimic .ytLockupViewModelHorizontal { display: flex; padding: 0 16px; }
+    #fixture-root .yt-mimic .ytLockupViewModelContentImage { display: block; flex: none; width: 172px; height: 80px; }
+    #fixture-root .yt-mimic .ytLockupViewModelMetadata { flex-grow: 1; min-width: 0; }
+    #fixture-root .yt-mimic ytm-video-with-context-renderer { margin: 0; padding: 12px 0; border: 0; }
+    #fixture-root .yt-mimic grid-shelf-view-model { display: flex; margin: 12px 16px 24px; }
+    #fixture-root .yt-mimic .ytGridShelfViewModelGridShelfRow { display: flex; margin: 12px 0 8px; }
   </style>
   <script src="/dopazero-youtube.user.js"></script>
   <script>
@@ -620,6 +628,26 @@
         await play('watch-slot', 'play', 'playing');
         assert(pauses === 3, '시청 화면으로 옮긴 플레이어는 멈추면 안 됩니다');
         hidden('stack-thumbnail'); shown('preview-card-headline'); shown('stack-headline');
+      }],
+      ['재생목록: 숨긴 썸네일 자리를 접어 제목이 카드 왼쪽부터 시작', async () => {
+        await mount('/playlist?list=PLexample', `${header}<main class="yt-mimic">${playlistVideo('fold')}<ytm-expandable-video-description-body-renderer>${playlistVideo('fold-kept')}</ytm-expandable-video-description-body-renderer></main>`);
+        hidden('fold-thumbnail');
+        assert(!visible(get('fold').querySelector('.ytLockupViewModelContentImage')), '썸네일을 숨긴 링크 자리(172×80)도 접혀야 합니다');
+        const contentLeft = Math.round(get('fold').querySelector('.ytLockupViewModelHost').getBoundingClientRect().left + 16);
+        const titleLeft = Math.round(get('fold-headline').getBoundingClientRect().left);
+        assert(titleLeft === contentLeft, `제목이 카드 안쪽 여백 바로 뒤에서 시작해야 합니다 (${titleLeft} / ${contentLeft})`);
+        assert(get('fold-headline').matches('a[href^="/watch"]'), '제목 링크로 영상에 들어갈 수 있어야 합니다');
+        shown('fold-kept-thumbnail');
+        assert(visible(get('fold-kept').querySelector('.ytLockupViewModelContentImage')), '썸네일을 숨기지 않는 영역의 카드는 그대로여야 합니다');
+      }],
+      ['검색: Shorts만 담은 그리드 틀을 숨겨 결과 사이 빈 띠를 없애고, 일반 영상이 섞인 그리드는 유지', async () => {
+        const shortsItem = id => `<div class="ytGridShelfViewModelGridShelfItem"><ytm-shorts-lockup-view-model class="shortsLockupViewModelHost"><a href="/shorts/${id}" class="shortsLockupViewModelHostEndpoint reel-item-endpoint"><div class="shortsLockupViewModelHostThumbnailParentContainer"><yt-thumbnail-view-model class="ytThumbnailViewModelHost"><div class="ytThumbnailViewModelImage"><img alt="" src="${channelImage}"></div></yt-thumbnail-view-model></div></a></ytm-shorts-lockup-view-model></div>`;
+        const grid = (name, items) => `<grid-shelf-view-model class="ytGridShelfViewModelHost item" data-test="${name}"><div><div class="ytGridShelfViewModelGridShelfRow item">${items}</div></div><div class="ytGridShelfViewModelGridShelfBottomButtonContainer"></div></grid-shelf-view-model>`;
+        await mount('/results?search_query=lofi', `${header}<main class="yt-mimic"><ytm-item-section-renderer><lazy-list>${searchVideo('grid-before')}${grid('shorts-grid', shortsItem('s1') + shortsItem('s2'))}${searchVideo('grid-after')}${grid('mixed-grid', `${shortsItem('s3')}<div class="ytGridShelfViewModelGridShelfItem">${playlistVideo('grid-video')}</div>`)}</lazy-list></ytm-item-section-renderer></main>`);
+        hidden('shorts-grid');
+        const gap = get('grid-after').getBoundingClientRect().top - get('grid-before').getBoundingClientRect().bottom;
+        assert(gap === 0, `Shorts 틀이 있던 자리에 빈 띠가 남으면 안 됩니다 (${gap}px)`);
+        ['mixed-grid', 'grid-video-headline', 'grid-before-headline', 'grid-after-headline'].forEach(shown);
       }],
     ];
 
