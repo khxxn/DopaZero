@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DopaZero - YouTube 집중 모드
 // @namespace    dopazero.local
-// @version      1.0.6
+// @version      1.0.7
 // @description  홈 추천 피드, 영상 썸네일, 시청 페이지 추천 영상과 Shorts 진입점을 숨깁니다.
 // @match        https://m.youtube.com/*
 // @match        https://www.youtube.com/*
@@ -34,6 +34,9 @@
     'ytm-video-renderer', 'ytm-grid-video-renderer', 'ytm-playlist-video-renderer',
     'ytm-playlist-panel-video-renderer', 'ytm-rich-grid-media',
     'ytm-media-item', 'ytm-lockup-view-model',
+    // "내 페이지" history and playlist carousels. Their images load lazily, so
+    // the image-path fallback alone leaves a blank box until each one loads.
+    'ytm-video-card-renderer', 'ytm-playlist-card-renderer',
     'ytd-video-renderer', 'ytd-grid-video-renderer', 'ytd-rich-grid-media',
     'ytd-compact-video-renderer', 'ytd-playlist-video-renderer',
     'ytd-playlist-panel-video-renderer', 'yt-lockup-view-model',
@@ -138,10 +141,12 @@
   const videoImageRules = `:is(${VIDEO_IMAGES.join(',')})${notPreserved}`;
   const videoBoxRules = `:is(${THUMBNAIL_BOXES.join(',')}):has(${VIDEO_IMAGES.join(',')})${notPreserved}`;
   // Frames that stay behind as blank space: a playlist card's thumbnail link
-  // (its title would start halfway across), and a search grid that held only
-  // Shorts. A grid that also holds regular videos stays.
+  // (its title would start halfway across, or below the stacked-playlist
+  // edge), and a search grid that held only Shorts. A grid that also holds
+  // regular videos stays.
   const emptyFrameRules = [
     `yt-lockup-view-model .ytLockupViewModelContentImage:has(yt-thumbnail-view-model)${notPreserved}`,
+    `ytm-playlist-card-renderer .playlist-card-image:has(.video-thumbnail-container-compact)${notPreserved}`,
     `grid-shelf-view-model:has(${SHORTS_LOCKUPS.join(',')}):not(:has(${VIDEO_CARDS.join(',')}))`,
   ];
   const style = document.createElement('style');
