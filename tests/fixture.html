@@ -129,6 +129,10 @@
       return element.getClientRects().length > 0;
     }
     function assert(condition, message) { if (!condition) throw new Error(message); }
+    // At browser zoom or display scaling other than 100%, layout positions are
+    // fractional (12px comes back as 11.9964), so compare pixels with a margin.
+    const near = (a, b, margin = 0.5) => Math.abs(a - b) <= margin;
+    const px = value => Math.round(value * 100) / 100;
     function shown(name) { assert(visible(get(name)), `${name}: 표시되어야 합니다`); }
     function hidden(name) { assert(get(name), `${name}: 테스트 요소가 없습니다`); assert(!visible(get(name)), `${name}: 숨겨져야 합니다`); }
     function page(expected) { assert(document.documentElement.getAttribute('data-dopazero-page') === expected, `페이지 유형이 ${expected}여야 합니다`); }
@@ -588,15 +592,15 @@
         }
         assert(ours.fontSize === '18px' && ours.lineHeight === '26px' && ours.fontWeight === '700', '머리글은 18px/26px 굵게(700)여야 합니다');
         const box = element => element.getBoundingClientRect();
-        assert(box(heading).left === box(get('ch-shelf-heading')).left, '두 머리글은 같은 왼쪽 선에 있어야 합니다');
-        assert(box(heading).height === box(get('ch-shelf-header')).height, '머리글 높이(아래 3px 포함)가 "동영상"과 같아야 합니다');
+        assert(near(box(heading).left, box(get('ch-shelf-heading')).left), '두 머리글은 같은 왼쪽 선에 있어야 합니다');
+        assert(near(box(heading).height, box(get('ch-shelf-header')).height), '머리글 높이(아래 3px 포함)가 "동영상"과 같아야 합니다');
         const ourGap = box(get('ch-featured-heading')).top - box(heading).bottom;
         const shelfGap = box(get('ch-list-headline')).top - box(get('ch-shelf-header')).bottom;
-        assert(ourGap === shelfGap && ourGap === 12, `머리글 아래부터 제목까지 12px이어야 합니다 (${ourGap} / ${shelfGap})`);
+        assert(near(ourGap, shelfGap) && near(ourGap, 12), `머리글 아래부터 제목까지 12px이어야 합니다 (${px(ourGap)} / ${px(shelfGap)})`);
         const listLeft = box(get('ch-list-headline')).left;
-        assert(box(get('ch-featured-heading')).left === listLeft, `대표 영상 제목이 목록 제목과 같은 선에서 시작해야 합니다 (${box(get('ch-featured-heading')).left} / ${listLeft})`);
+        assert(near(box(get('ch-featured-heading')).left, listLeft), `대표 영상 제목이 목록 제목과 같은 선에서 시작해야 합니다 (${px(box(get('ch-featured-heading')).left)} / ${px(listLeft)})`);
         const info = added(get('ch-featured'), 'featured-info')[0];
-        assert(info && box(info).left === listLeft, '대표 영상 정보 줄도 목록 제목과 같은 선이어야 합니다');
+        assert(info && near(box(info).left, listLeft), '대표 영상 정보 줄도 목록 제목과 같은 선이어야 합니다');
         const infoStyle = getComputedStyle(info);
         const listStyle = getComputedStyle(get('ch-list-subhead'));
         for (const property of ['font-size', 'line-height', 'opacity', 'color']) {
@@ -633,9 +637,9 @@
         await mount('/playlist?list=PLexample', `${header}<main class="yt-mimic">${playlistVideo('fold')}<ytm-expandable-video-description-body-renderer>${playlistVideo('fold-kept')}</ytm-expandable-video-description-body-renderer></main>`);
         hidden('fold-thumbnail');
         assert(!visible(get('fold').querySelector('.ytLockupViewModelContentImage')), '썸네일을 숨긴 링크 자리(172×80)도 접혀야 합니다');
-        const contentLeft = Math.round(get('fold').querySelector('.ytLockupViewModelHost').getBoundingClientRect().left + 16);
-        const titleLeft = Math.round(get('fold-headline').getBoundingClientRect().left);
-        assert(titleLeft === contentLeft, `제목이 카드 안쪽 여백 바로 뒤에서 시작해야 합니다 (${titleLeft} / ${contentLeft})`);
+        const contentLeft = get('fold').querySelector('.ytLockupViewModelHost').getBoundingClientRect().left + 16;
+        const titleLeft = get('fold-headline').getBoundingClientRect().left;
+        assert(near(titleLeft, contentLeft), `제목이 카드 안쪽 여백 바로 뒤에서 시작해야 합니다 (${px(titleLeft)} / ${px(contentLeft)})`);
         assert(get('fold-headline').matches('a[href^="/watch"]'), '제목 링크로 영상에 들어갈 수 있어야 합니다');
         shown('fold-kept-thumbnail');
         assert(visible(get('fold-kept').querySelector('.ytLockupViewModelContentImage')), '썸네일을 숨기지 않는 영역의 카드는 그대로여야 합니다');
@@ -646,8 +650,20 @@
         await mount('/results?search_query=lofi', `${header}<main class="yt-mimic"><ytm-item-section-renderer><lazy-list>${searchVideo('grid-before')}${grid('shorts-grid', shortsItem('s1') + shortsItem('s2'))}${searchVideo('grid-after')}${grid('mixed-grid', `${shortsItem('s3')}<div class="ytGridShelfViewModelGridShelfItem">${playlistVideo('grid-video')}</div>`)}</lazy-list></ytm-item-section-renderer></main>`);
         hidden('shorts-grid');
         const gap = get('grid-after').getBoundingClientRect().top - get('grid-before').getBoundingClientRect().bottom;
-        assert(gap === 0, `Shorts 틀이 있던 자리에 빈 띠가 남으면 안 됩니다 (${gap}px)`);
+        assert(near(gap, 0), `Shorts 틀이 있던 자리에 빈 띠가 남으면 안 됩니다 (${px(gap)}px)`);
         ['mixed-grid', 'grid-video-headline', 'grid-before-headline', 'grid-after-headline'].forEach(shown);
+      }],
+      ['내 페이지: 이미지가 아직 안 불러와진 기록·재생목록 카드도 썸네일과 재생목록 겹침 칸을 접음', async () => {
+        // Same nesting as the signed-in m.youtube.com/feed/you carousels
+        // (2026-10-25). Off-screen cards have no image address yet.
+        await mount('/feed/you', `${header}<main><ytm-item-section-renderer><ytm-horizontal-card-list-renderer><ytm-video-card-renderer class="horizontal-card-list-card"><a class="video-card-image" href="/watch?v=history&amp;t=8"><ytm-compact-thumbnail class="video-thumbnail-container-compact video-thumbnail-container-compact-rounded" data-test="you-history-thumbnail"><img class="video-thumbnail-img" alt="">${timeBadge('14:26')}</ytm-compact-thumbnail></a><div class="video-card-metadata"><a class="video-card-title-container" href="/watch?v=history&amp;t=8"><h4 class="video-card-title" data-test="you-history-title">기록 영상 제목</h4><div class="video-card-subhead"><div class="video-card-subhead-item"><span>예시 채널</span></div><div class="video-card-subhead-item"><span>조회수 56만회 · 2일 전</span></div></div></a></div></ytm-video-card-renderer></ytm-horizontal-card-list-renderer></ytm-item-section-renderer><ytm-item-section-renderer><ytm-horizontal-card-list-renderer><ytm-playlist-card-renderer class="horizontal-card-list-card" data-test="you-playlist"><a class="playlist-card-image stacked" href="/playlist?list=LL" data-test="you-playlist-image"><yt-collections-stack class="ytCollectionsStackHost"><div><div class="ytCollectionsStackCollectionStack1 ytCollectionsStackCollectionStack1Medium" data-test="you-playlist-stack"></div><ytm-compact-thumbnail class="video-thumbnail-container-compact video-thumbnail-container-compact-rounded stacked" data-test="you-playlist-thumbnail"><img class="video-thumbnail-img" alt=""></ytm-compact-thumbnail></div></yt-collections-stack></a><div class="playlist-card-metadata"><a class="playlist-card-title-container" href="/playlist?list=LL"><h4 class="playlist-card-title" data-test="you-playlist-title">좋아요 표시한 동영상</h4><div class="playlist-card-subhead"><div class="playlist-card-byline"><span>비공개 · 재생목록</span></div></div></a></div></ytm-playlist-card-renderer></ytm-horizontal-card-list-renderer></ytm-item-section-renderer></main>`);
+        page('other');
+        hidden('you-history-thumbnail'); shown('you-history-title');
+        hidden('you-playlist-thumbnail');
+        assert(!visible(get('you-playlist-image')), '재생목록 카드의 겹침 장식이 든 썸네일 칸도 접혀야 합니다');
+        hidden('you-playlist-stack');
+        shown('you-playlist-title');
+        assert(get('you-playlist-title').closest('a[href^="/playlist"]'), '재생목록 제목 링크는 그대로여야 합니다');
       }],
     ];
 
